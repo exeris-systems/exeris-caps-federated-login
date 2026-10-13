@@ -16,6 +16,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * PostgreSQL implementation of {@link ExternalIdentityRepository} using {@link TransactionalExecutor}.
@@ -111,8 +113,10 @@ public final class PostgresExternalIdentityRepository implements ExternalIdentit
         Instant effectiveLinkedAt = existingLink.map(ExternalLinkRecord::linkedAt).orElse(linkedAt);
         String metadataJson = (metadata != null && !metadata.isEmpty()) ? JsonReader.toJson(metadata) : null;
 
+        AtomicReference<ExternalLinkRecord> stored = new AtomicReference<>();
         try {
             tx.executeManaged(conn -> {
+                stored.set(null);
                 try (PersistenceStatement stmt = conn.prepare(
                         "INSERT INTO external_identity_links " +
                         "(id, local_subject_id, issuer, external_subject, email, email_verified, metadata, linked_at, updated_at) " +
@@ -121,7 +125,8 @@ public final class PostgresExternalIdentityRepository implements ExternalIdentit
                         "email = EXCLUDED.email, " +
                         "email_verified = EXCLUDED.email_verified, " +
                         "metadata = EXCLUDED.metadata, " +
-                        "updated_at = EXCLUDED.updated_at")) {
+                        "updated_at = EXCLUDED.updated_at " +
+                        "RETURNING id, local_subject_id, issuer, external_subject, email, email_verified, metadata, linked_at, updated_at")) {
                     stmt.bindUuid(0, targetId)
                         .bindUuid(1, localSubjectId)
                         .bindString(2, issuer)
@@ -144,7 +149,11 @@ public final class PostgresExternalIdentityRepository implements ExternalIdentit
                     stmt.bindInstant(7, effectiveLinkedAt)
                         .bindInstant(8, updatedAt);
 
-                    stmt.executeUpdate();
+                    try (QueryResult rs = stmt.executeQuery()) {
+                        if (rs.next()) {
+                            stored.set(mapRow(rs.row()));
+                        }
+                    }
                 }
             });
         } catch (PersistenceProviderException ppe) {
@@ -162,17 +171,18 @@ public final class PostgresExternalIdentityRepository implements ExternalIdentit
             throw re;
         }
 
-        return new ExternalLinkRecord(
-                targetId,
-                localSubjectId,
-                issuer,
-                externalSubject,
-                email,
-                emailVerified,
-                metadata,
-                effectiveLinkedAt,
-                updatedAt
-        );
+        // The upsert keeps the row's existing external_subject, so the stored row is what is returned;
+        // a concurrent link of another subject for the same issuer is a conflict, not a silent success.
+        ExternalLinkRecord result = stored.get();
+        if (result == null) {
+            throw new IllegalStateException("Identity link upsert returned no row");
+        }
+        if (!result.externalSubject().equals(externalSubject)) {
+            throw new IdentityLinkConflictException(
+                    "Local subject " + localSubjectId + " already has a linked identity for issuer " + issuer);
+        }
+        return new ExternalLinkRecord(result.id(), localSubjectId, issuer, result.externalSubject(), email,
+                emailVerified, metadata, result.linkedAt(), result.updatedAt());
     }
 
     @Override
@@ -180,14 +190,17 @@ public final class PostgresExternalIdentityRepository implements ExternalIdentit
         Objects.requireNonNull(localSubjectId, "localSubjectId must not be null");
         Objects.requireNonNull(issuer, "issuer must not be null");
 
-        return tx.query(conn -> {
+        AtomicBoolean deleted = new AtomicBoolean();
+        tx.executeManaged(conn -> {
+            deleted.set(false);
             try (PersistenceStatement stmt = conn.prepare(
                     "DELETE FROM external_identity_links WHERE local_subject_id = $1 AND issuer = $2")) {
                 stmt.bindUuid(0, localSubjectId)
                     .bindString(1, issuer);
-                return stmt.executeUpdate() > 0;
+                deleted.set(stmt.executeUpdate() > 0);
             }
         });
+        return deleted.get();
     }
 
     @Override
