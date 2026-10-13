@@ -70,13 +70,6 @@
 
         <dependency>
             <groupId>eu.exeris.caps</groupId>
-            <artifactId>exeris-caps-service-boundary-core</artifactId>
-            <version>0.1.0-SNAPSHOT</version>
-            <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>eu.exeris.caps</groupId>
             <artifactId>exeris-caps-audit-trail</artifactId>
             <version>0.1.0-SNAPSHOT</version>
             <optional>true</optional>

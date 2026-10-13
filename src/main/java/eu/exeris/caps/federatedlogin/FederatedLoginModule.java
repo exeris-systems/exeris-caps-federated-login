@@ -18,7 +18,6 @@ import eu.exeris.caps.federatedlogin.internal.repository.PostgresFlowStateReposi
 import eu.exeris.caps.federatedlogin.spi.AuditTrailBridge;
 import eu.exeris.caps.federatedlogin.spi.InMemoryOutboundCredentialStore;
 import eu.exeris.caps.federatedlogin.spi.OutboundCredentialStore;
-import eu.exeris.caps.serviceboundarycore.api.RequestContext;
 import eu.exeris.kernel.spi.http.HttpClientEngine;
 import eu.exeris.kernel.spi.persistence.TransactionalExecutor;
 import eu.exeris.kernel.spi.security.identity.TokenValidator;
@@ -50,7 +49,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Provides(service = FederatedLoginFlow.class, version = "0.1.0")
 @Provides(service = ExternalIdentityLink.class, version = "0.1.0")
 @Provides(service = FederationProviderRegistry.class, version = "0.1.0")
-@Requires(service = RequestContext.class, versionRange = "[0.1.0,0.2.0)", optional = true)
 @Requires(service = OutboundCredentialStore.class, versionRange = "[0.1.0,0.2.0)", optional = true)
 @Requires(service = HttpClientEngine.class, optional = true)
 @Requires(service = TokenValidator.class, optional = true)
@@ -103,9 +101,9 @@ public final class FederatedLoginModule implements CapabilityLifecycleHooks {
     }
 
     /**
-     * Full custom wiring constructor.
+     * Full custom wiring constructor; package-private because its parameters are internal types.
      */
-    public FederatedLoginModule(
+    FederatedLoginModule(
             FlowStateRepository flowStateRepository,
             ExternalIdentityRepository identityRepository,
             FederationProviderRegistry providerRegistry,

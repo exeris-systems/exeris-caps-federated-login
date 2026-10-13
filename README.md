@@ -7,9 +7,9 @@ Status: proof of concept, built against `exeris-kernel` 0.13.0-SNAPSHOT. The API
 ## Where it sits
 
 - **Layer:** Layer 5 — Domain primitive (identity), in the Tier 2 capability map of [`high-level-architecture.md`](https://github.com/exeris-systems/exeris-docs/blob/main/high-level-architecture.md) §3.2.
-- **Depends on:** `exeris-kernel-spi`, `exeris-sdk-composition-lifecycle`, `exeris-caps-service-boundary-core` and `exeris-caps-audit-trail`.
+- **Depends on:** `exeris-kernel-spi`, `exeris-sdk-composition-lifecycle` and `exeris-caps-audit-trail`.
 - **Provides** (`@Provides`, all version 0.1.0): `FederatedLoginFlow`, `ExternalIdentityLink`, `FederationProviderRegistry`.
-- **Requires** (`@Requires`, each declared `optional = true`): `eu.exeris.caps.serviceboundarycore.api.RequestContext`, `eu.exeris.caps.federatedlogin.spi.OutboundCredentialStore`, `eu.exeris.kernel.spi.http.HttpClientEngine`, `eu.exeris.kernel.spi.security.identity.TokenValidator`, `eu.exeris.kernel.spi.persistence.TransactionalExecutor`, `eu.exeris.caps.audittrail.api.AuditLogSink`.
+- **Requires** (`@Requires`, each declared `optional = true`): `eu.exeris.caps.federatedlogin.spi.OutboundCredentialStore`, `eu.exeris.kernel.spi.http.HttpClientEngine`, `eu.exeris.kernel.spi.security.identity.TokenValidator`, `eu.exeris.kernel.spi.persistence.TransactionalExecutor`, `eu.exeris.caps.audittrail.api.AuditLogSink`.
 - **Wall (ADR-055):** `eu.exeris.caps.federatedlogin.api` is the cross-cap surface; `eu.exeris.caps.federatedlogin.internal` is private, and a sibling cap reaching into it fails the build. No Spring, servlet, Netty or reactive type may appear (ADR-006).
 
 Behaviour worth knowing before composing it:
@@ -29,7 +29,7 @@ mvn verify                               # pass 2 — generate cap-manifest.json
 
 Both passes are needed after a `clean`: `exeris:generate` runs before `compile`, and `compile` is when the processor writes the metadata it reads. `src/main/generated/java/cap-manifest.json` is committed, so a clean `git status` after `mvn verify` shows the manifest matches the declaration.
 
-The upstreams are not on Maven Central. `exeris-sdk` v0.12.0 and `exeris-tooling` v0.9.0 are built from source at those tags, and `exeris-kernel` 0.13.0-SNAPSHOT is resolved from GitHub Packages, which needs a token with `read:packages`; the sibling `exeris-caps-service-boundary-core` and `exeris-caps-audit-trail` are built from source first. [`.github/workflows/build.yml`](.github/workflows/build.yml) is the exact sequence, and [`.github/maven-settings.xml`](.github/maven-settings.xml) the repository configuration it uses.
+The upstreams are not on Maven Central. `exeris-sdk` v0.12.0 and `exeris-tooling` v0.9.0 are built from source at those tags, and `exeris-kernel` 0.13.0-SNAPSHOT is resolved from GitHub Packages, which needs a token with `read:packages`; the sibling `exeris-caps-audit-trail` (and its own dependency `exeris-caps-service-boundary-core`) are built from source first. [`.github/workflows/build.yml`](.github/workflows/build.yml) is the exact sequence, and [`.github/maven-settings.xml`](.github/maven-settings.xml) the repository configuration it uses.
 
 ## Documentation
 
