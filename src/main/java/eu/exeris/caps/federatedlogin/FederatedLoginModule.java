@@ -8,6 +8,7 @@ import eu.exeris.caps.federatedlogin.api.FederationProviderRegistry;
 import eu.exeris.caps.federatedlogin.internal.crypto.FlowStateCrypto;
 import eu.exeris.caps.federatedlogin.internal.crypto.FlowStateKeyring;
 import eu.exeris.caps.federatedlogin.internal.flow.DefaultFederatedLoginFlow;
+import eu.exeris.caps.federatedlogin.internal.flow.RedirectPolicy;
 import eu.exeris.caps.federatedlogin.internal.provider.DefaultExternalIdentityLink;
 import eu.exeris.caps.federatedlogin.internal.provider.DefaultFederationProviderRegistry;
 import eu.exeris.caps.federatedlogin.internal.provider.GitHubFederationProvider;
@@ -79,7 +80,8 @@ public final class FederatedLoginModule implements CapabilityLifecycleHooks {
                 new InMemoryOutboundCredentialStore(),
                 null,
                 null,
-                null
+                null,
+                RedirectPolicy.fromEnvironment(System.getenv())
         );
     }
 
@@ -106,6 +108,10 @@ public final class FederatedLoginModule implements CapabilityLifecycleHooks {
      * PKCE verifier is sealed under a keyring that every node must hold:
      * {@value FlowStateKeyring#ENV_KEYS} or {@value FlowStateKeyring#ENV_KEYS_FILE} in {@code environment}.
      *
+     * <p>The redirect URIs a flow may use are an allow-list read from
+     * {@value RedirectPolicy#ENV_REDIRECT_URIS} and {@value RedirectPolicy#ENV_POST_LOGIN_ORIGINS}; with
+     * neither set, every {@code initiateLogin} is rejected.
+     *
      * @throws FederatedLoginConfigurationException when {@code tx} is supplied and the keyring is
      *                                              missing or malformed
      */
@@ -125,7 +131,8 @@ public final class FederatedLoginModule implements CapabilityLifecycleHooks {
                 credentialStore != null ? credentialStore : new InMemoryOutboundCredentialStore(),
                 httpClient,
                 tokenValidator,
-                auditLogSink != null ? new AuditTrailBridge(auditLogSink) : null
+                auditLogSink != null ? new AuditTrailBridge(auditLogSink) : null,
+                RedirectPolicy.fromEnvironment(environment)
         );
     }
 
@@ -139,7 +146,8 @@ public final class FederatedLoginModule implements CapabilityLifecycleHooks {
             OutboundCredentialStore credentialStore,
             HttpClientEngine httpClient,
             TokenValidator tokenValidator,
-            AuditTrailBridge auditTrail
+            AuditTrailBridge auditTrail,
+            RedirectPolicy redirectPolicy
     ) {
         Objects.requireNonNull(flowStateRepository, "flowStateRepository must not be null");
         Objects.requireNonNull(identityRepository, "identityRepository must not be null");
@@ -155,7 +163,8 @@ public final class FederatedLoginModule implements CapabilityLifecycleHooks {
                 credentialStore,
                 httpClient,
                 tokenValidator,
-                auditTrail
+                auditTrail,
+                redirectPolicy
         );
     }
 

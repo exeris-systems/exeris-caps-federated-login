@@ -44,6 +44,7 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
     private final HttpClientEngine httpClient;
     private final TokenValidator tokenValidator;
     private final AuditTrailBridge auditTrail;
+    private final RedirectPolicy redirectPolicy;
     private final Duration flowTtl;
 
     public DefaultFederatedLoginFlow(
@@ -53,10 +54,11 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
             OutboundCredentialStore credentialStore,
             HttpClientEngine httpClient,
             TokenValidator tokenValidator,
-            AuditTrailBridge auditTrail
+            AuditTrailBridge auditTrail,
+            RedirectPolicy redirectPolicy
     ) {
         this(providerRegistry, flowStateRepository, externalIdentityLink, credentialStore,
-                httpClient, tokenValidator, auditTrail, DEFAULT_FLOW_TTL);
+                httpClient, tokenValidator, auditTrail, redirectPolicy, DEFAULT_FLOW_TTL);
     }
 
     public DefaultFederatedLoginFlow(
@@ -67,6 +69,7 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
             HttpClientEngine httpClient,
             TokenValidator tokenValidator,
             AuditTrailBridge auditTrail,
+            RedirectPolicy redirectPolicy,
             Duration flowTtl
     ) {
         this.providerRegistry = Objects.requireNonNull(providerRegistry, "providerRegistry must not be null");
@@ -76,6 +79,7 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
         this.httpClient = httpClient;
         this.tokenValidator = tokenValidator;
         this.auditTrail = auditTrail;
+        this.redirectPolicy = Objects.requireNonNull(redirectPolicy, "redirectPolicy must not be null");
         this.flowTtl = flowTtl != null ? flowTtl : DEFAULT_FLOW_TTL;
     }
 
@@ -91,6 +95,9 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
         }
 
         FederationProviderAdapter adapter = providerRegistry.getProvider(providerId);
+
+        redirectPolicy.requireRegisteredRedirectUri(providerId, redirectUri);
+        redirectPolicy.requireSafePostLoginUrl(targetPostLoginUrl);
 
         OutboundCredentialStore.ProviderClientCredentials credentials = credentialStore.getCredentials(providerId)
                 .orElseThrow(() -> new ProviderCommunicationException("No client credentials registered for provider: " + providerId));

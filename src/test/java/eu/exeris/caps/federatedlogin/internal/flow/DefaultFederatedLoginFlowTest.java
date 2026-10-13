@@ -3,6 +3,7 @@ package eu.exeris.caps.federatedlogin.internal.flow;
 import eu.exeris.caps.audittrail.api.AuditEvent;
 import eu.exeris.caps.audittrail.api.AuditLogSink;
 import eu.exeris.caps.federatedlogin.api.FederationProviderAdapter;
+import eu.exeris.caps.federatedlogin.api.exception.InvalidRedirectException;
 import eu.exeris.caps.federatedlogin.api.exception.InvalidStateException;
 import eu.exeris.caps.federatedlogin.api.exception.ProviderNotFoundException;
 import eu.exeris.caps.federatedlogin.api.model.AuthorizationInitResult;
@@ -65,6 +66,11 @@ class DefaultFederatedLoginFlowTest {
         }
     }
 
+    private static final RedirectPolicy POLICY = RedirectPolicy.of(
+            Map.of("test-provider", List.of("https://app.exeris.eu/cb"),
+                    "other-provider", List.of("https://app.exeris.eu/cb")),
+            List.of("https://app.exeris.eu"));
+
     private DefaultFederationProviderRegistry providerRegistry;
     private InMemoryFlowStateRepository flowStateRepository;
     private InMemoryExternalIdentityRepository identityRepository;
@@ -95,8 +101,21 @@ class DefaultFederatedLoginFlowTest {
                 null,
                 null,
                 auditTrail,
+                POLICY,
                 Duration.ofMinutes(5)
         );
+    }
+
+    @Test
+    @DisplayName("initiateLogin rejects an unregistered redirectUri or a foreign post-login URL and stores nothing")
+    void initiateLoginRejectsUnlistedRedirects() {
+        assertThatThrownBy(() -> flow.initiateLogin("test-provider", "https://evil.example/cb", null))
+                .isInstanceOf(InvalidRedirectException.class);
+        assertThatThrownBy(() -> flow.initiateLogin("test-provider", "https://app.exeris.eu/cb", "https://evil.example/x"))
+                .isInstanceOf(InvalidRedirectException.class);
+        assertThatThrownBy(() -> flow.initiateLogin("test-provider", "https://app.exeris.eu/cb", "//evil.example"))
+                .isInstanceOf(InvalidRedirectException.class);
+        assertThat(flow.initiateLogin("test-provider", "https://app.exeris.eu/cb", "/home").state()).isNotBlank();
     }
 
     @Test
@@ -266,6 +285,7 @@ class DefaultFederatedLoginFlowTest {
                 null,
                 null,
                 null,
+                POLICY,
                 Duration.ofMillis(1) // expires immediately
         );
 

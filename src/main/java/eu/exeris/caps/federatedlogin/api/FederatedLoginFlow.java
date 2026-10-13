@@ -21,9 +21,12 @@ public interface FederatedLoginFlow {
      * Initiates a federated login flow with the specified provider.
      *
      * @param providerId         identifier of the provider (e.g. "google", "github")
-     * @param redirectUri        registered redirect URI for callback
-     * @param targetPostLoginUrl application URL to navigate the user to after successful sign-in
-     * @return the authorization redirect URI and anti-forgery state token
+     * @param redirectUri        redirect URI for callback; must equal a URI configured for the provider
+     * @param targetPostLoginUrl relative path or URL on a configured origin to navigate the user to after
+     *                           sign-in; may be {@code null}
+     * @return the authorization redirect URI, the anti-forgery state token, and the browser-binding value
+     * @throws eu.exeris.caps.federatedlogin.api.exception.InvalidRedirectException if either URL is not
+     *         allowed by the configuration
      */
     AuthorizationInitResult initiateLogin(String providerId, String redirectUri, String targetPostLoginUrl);
 
