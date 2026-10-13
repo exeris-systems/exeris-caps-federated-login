@@ -1,0 +1,122 @@
+{
+  "schemaVersion" : 2,
+  "stamp" : {
+    "validated" : true,
+    "compositionVersion" : "0.0.0",
+    "contentBinding" : "sha256:67a97d5e9b6dabda35632760ab6771f6642ae9b0f12200ee37ec15bf25187b81"
+  },
+  "modules" : [
+    {
+      "name" : "FederatedLoginModule",
+      "packageName" : "eu.exeris.caps.federatedlogin",
+      "qualifiedName" : "eu.exeris.caps.federatedlogin.FederatedLoginModule",
+      "module" : {
+        "provides" : [
+          {
+            "service" : "eu.exeris.caps.federatedlogin.api.FederatedLoginFlow",
+            "version" : "1.0.0"
+          },
+          {
+            "service" : "eu.exeris.caps.federatedlogin.api.ExternalIdentityLink",
+            "version" : "1.0.0"
+          },
+          {
+            "service" : "eu.exeris.caps.federatedlogin.api.FederationProviderRegistry",
+            "version" : "1.0.0"
+          }
+        ],
+        "requires" : [
+          {
+            "service" : "eu.exeris.caps.serviceboundarycore.api.RequestContext",
+            "versionRange" : "[1.0.0,2.0.0)",
+            "optional" : true
+          },
+          {
+            "service" : "eu.exeris.caps.federatedlogin.spi.OutboundCredentialStore",
+            "versionRange" : "[1.0.0,2.0.0)",
+            "optional" : true
+          },
+          {
+            "service" : "eu.exeris.kernel.spi.http.HttpClientEngine",
+            "optional" : true
+          },
+          {
+            "service" : "eu.exeris.kernel.spi.security.identity.TokenValidator",
+            "optional" : true
+          },
+          {
+            "service" : "eu.exeris.kernel.spi.persistence.TransactionalExecutor",
+            "optional" : true
+          },
+          {
+            "service" : "eu.exeris.caps.audittrail.api.AuditLogSink",
+            "versionRange" : "[1.0.0,2.0.0)",
+            "optional" : true
+          }
+        ],
+        "lifecycleOwner" : "eu.exeris.caps.federatedlogin.FederatedLoginModule"
+      }
+    }
+  ],
+  "resolutions" : [
+    {
+      "module" : "eu.exeris.caps.federatedlogin.FederatedLoginModule",
+      "service" : "eu.exeris.caps.audittrail.api.AuditLogSink",
+      "versionRange" : "[1.0.0,2.0.0)",
+      "optional" : true,
+      "satisfied" : false,
+      "providers" : [ ]
+    },
+    {
+      "module" : "eu.exeris.caps.federatedlogin.FederatedLoginModule",
+      "service" : "eu.exeris.caps.federatedlogin.spi.OutboundCredentialStore",
+      "versionRange" : "[1.0.0,2.0.0)",
+      "optional" : true,
+      "satisfied" : false,
+      "providers" : [ ]
+    },
+    {
+      "module" : "eu.exeris.caps.federatedlogin.FederatedLoginModule",
+      "service" : "eu.exeris.caps.serviceboundarycore.api.RequestContext",
+      "versionRange" : "[1.0.0,2.0.0)",
+      "optional" : true,
+      "satisfied" : false,
+      "providers" : [ ]
+    },
+    {
+      "module" : "eu.exeris.caps.federatedlogin.FederatedLoginModule",
+      "service" : "eu.exeris.kernel.spi.http.HttpClientEngine",
+      "versionRange" : null,
+      "optional" : true,
+      "satisfied" : false,
+      "providers" : [ ]
+    },
+    {
+      "module" : "eu.exeris.caps.federatedlogin.FederatedLoginModule",
+      "service" : "eu.exeris.kernel.spi.persistence.TransactionalExecutor",
+      "versionRange" : null,
+      "optional" : true,
+      "satisfied" : false,
+      "providers" : [ ]
+    },
+    {
+      "module" : "eu.exeris.caps.federatedlogin.FederatedLoginModule",
+      "service" : "eu.exeris.kernel.spi.security.identity.TokenValidator",
+      "versionRange" : null,
+      "optional" : true,
+      "satisfied" : false,
+      "providers" : [ ]
+    }
+  ],
+  "initOrder" : [
+    "eu.exeris.caps.federatedlogin.FederatedLoginModule"
+  ],
+  "warnings" : [
+    "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.caps.audittrail.api.AuditLogSink version [1.0.0,2.0.0) but no @CapabilityModule provides it (optional — skipped)",
+    "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.caps.federatedlogin.spi.OutboundCredentialStore version [1.0.0,2.0.0) but no @CapabilityModule provides it (optional — skipped)",
+    "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.caps.serviceboundarycore.api.RequestContext version [1.0.0,2.0.0) but no @CapabilityModule provides it (optional — skipped)",
+    "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.kernel.spi.http.HttpClientEngine but no @CapabilityModule provides it (optional — skipped)",
+    "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.kernel.spi.persistence.TransactionalExecutor but no @CapabilityModule provides it (optional — skipped)",
+    "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.kernel.spi.security.identity.TokenValidator but no @CapabilityModule provides it (optional — skipped)"
+  ]
+}
