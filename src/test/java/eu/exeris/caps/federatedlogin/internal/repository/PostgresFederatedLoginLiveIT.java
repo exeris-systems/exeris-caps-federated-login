@@ -1,16 +1,21 @@
 package eu.exeris.caps.federatedlogin.internal.repository;
 
+import eu.exeris.caps.federatedlogin.api.exception.FlowStateUnreadableException;
 import eu.exeris.caps.federatedlogin.api.exception.IdentityLinkConflictException;
 import eu.exeris.caps.federatedlogin.api.model.ExternalLinkRecord;
+import eu.exeris.caps.federatedlogin.internal.crypto.FlowStateCrypto;
+import eu.exeris.caps.federatedlogin.internal.crypto.FlowStateKeyring;
 import eu.exeris.kernel.community.persistence.jdbc.JdbcPersistenceConnection;
 import eu.exeris.kernel.spi.persistence.PersistenceConnection;
 import eu.exeris.kernel.spi.persistence.TransactionIsolation;
 import eu.exeris.kernel.spi.persistence.TransactionalExecutor;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -19,6 +24,8 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,51 +35,51 @@ import java.util.function.Function;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@DisplayName("PostgresFederatedLogin Live PostgreSQL Integration Tests")
+/**
+ * Runs the repositories against a real PostgreSQL started by Testcontainers. It needs a Docker daemon and
+ * fails when there is none: the SQL ({@code DELETE ... RETURNING}, {@code ON CONFLICT}) is verified only
+ * here, so a run that cannot start the database must not pass.
+ */
+@Testcontainers(disabledWithoutDocker = false)
+@DisplayName("PostgresFederatedLogin PostgreSQL Integration Tests")
 class PostgresFederatedLoginLiveIT {
 
-    private static final String PG_URL = "jdbc:postgresql://localhost:5432/exeris_showroom";
-    private static final String PG_USER = "exeris";
-    private static final String PG_PASS = "exeris_password";
-    private static final String TEST_SCHEMA = "test_fed_login_live";
+    private static final String KEY_RING_A = "k1:" + Base64.getEncoder().encodeToString(new byte[32]);
+    private static final String KEY_RING_OTHER = "k9:" + Base64.getEncoder().encodeToString(filled(5));
+
+    @Container
+    private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
     private static Connection jdbcConn;
+    private static TransactionalExecutor tx;
     private static PostgresFlowStateRepository flowStateRepo;
     private static PostgresExternalIdentityRepository identityRepo;
 
-    @BeforeAll
-    static void setUpDatabase() {
-        try (Connection initConn = DriverManager.getConnection(PG_URL, PG_USER, PG_PASS);
-             Statement stmt = initConn.createStatement()) {
-            stmt.execute("DROP SCHEMA IF EXISTS " + TEST_SCHEMA + " CASCADE");
-            stmt.execute("CREATE SCHEMA " + TEST_SCHEMA);
-        } catch (SQLException e) {
-            Assumptions.abort("PostgreSQL not reachable at " + PG_URL + ": " + e.getMessage());
-            return;
-        }
+    private static byte[] filled(int value) {
+        byte[] bytes = new byte[32];
+        Arrays.fill(bytes, (byte) value);
+        return bytes;
+    }
 
-        try {
-            jdbcConn = DriverManager.getConnection(PG_URL + "?currentSchema=" + TEST_SCHEMA, PG_USER, PG_PASS);
-            try (Statement stmt = jdbcConn.createStatement()) {
-                try (InputStream is = PostgresFederatedLoginLiveIT.class.getResourceAsStream("/schema/federated-login-schema.sql")) {
-                    if (is != null) {
-                        String ddl = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                        String cleanDdl = ddl.replaceAll("(?m)^--.*$", "");
-                        for (String command : cleanDdl.split(";")) {
-                            String trimmed = command.trim();
-                            if (!trimmed.isEmpty()) {
-                                stmt.execute(trimmed);
-                            }
-                        }
-                    }
+    private static PostgresFlowStateRepository flowRepo(String keyring) {
+        return new PostgresFlowStateRepository(tx, new FlowStateCrypto(FlowStateKeyring.parse("it", keyring)));
+    }
+
+    @BeforeAll
+    static void setUpDatabase() throws Exception {
+        jdbcConn = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        try (Statement stmt = jdbcConn.createStatement();
+             InputStream is = PostgresFederatedLoginLiveIT.class.getResourceAsStream("/schema/federated-login-schema.sql")) {
+            assertThat(is).as("schema resource").isNotNull();
+            String ddl = new String(is.readAllBytes(), StandardCharsets.UTF_8).replaceAll("(?m)^--.*$", "");
+            for (String command : ddl.split(";")) {
+                if (!command.isBlank()) {
+                    stmt.execute(command.trim());
                 }
             }
-        } catch (Exception e) {
-            Assumptions.abort("Failed to initialize test schema on PostgreSQL: " + e.getMessage());
-            return;
         }
 
-        TransactionalExecutor tx = new TransactionalExecutor() {
+        tx = new TransactionalExecutor() {
             @Override
             public void execute(TransactionalWork work) {
                 executeManaged(work);
@@ -88,7 +95,9 @@ class PostgresFederatedLoginLiveIT {
                 } catch (Exception e) {
                     try {
                         jdbcConn.rollback();
-                    } catch (SQLException ignored) {}
+                    } catch (SQLException ignored) {
+                        // the original failure is the one to report
+                    }
                     throw new RuntimeException(e);
                 }
             }
@@ -101,31 +110,62 @@ class PostgresFederatedLoginLiveIT {
             @Override
             public <T> T query(Function<PersistenceConnection, T> query) {
                 try {
-                    PersistenceConnection conn = new JdbcPersistenceConnection(jdbcConn);
-                    return query.apply(conn);
+                    return query.apply(new JdbcPersistenceConnection(jdbcConn));
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
             }
         };
 
-        flowStateRepo = new PostgresFlowStateRepository(tx, new eu.exeris.caps.federatedlogin.internal.crypto.FlowStateCrypto(
-                eu.exeris.caps.federatedlogin.internal.crypto.FlowStateKeyring.parse("it", "k1:" + java.util.Base64.getEncoder().encodeToString(new byte[32]))));
+        flowStateRepo = flowRepo(KEY_RING_A);
         identityRepo = new PostgresExternalIdentityRepository(tx);
     }
 
     @AfterAll
-    static void tearDownDatabase() {
+    static void tearDownDatabase() throws SQLException {
         if (jdbcConn != null) {
-            try (Statement stmt = jdbcConn.createStatement()) {
-                stmt.execute("DROP SCHEMA IF EXISTS " + TEST_SCHEMA + " CASCADE");
-            } catch (SQLException ignored) {
-            } finally {
-                try {
-                    jdbcConn.close();
-                } catch (SQLException ignored) {}
-            }
+            jdbcConn.close();
         }
+    }
+
+    @Test
+    @DisplayName("a second repository holding the same keyring consumes a state the first saved; another keyring leaves it in place")
+    void sharedKeyringAcrossNodes() {
+        Instant now = Instant.now();
+        FlowStateRecord record = new FlowStateRecord("pg-state-shared", "google", "https://app.exeris.eu/cb", null,
+                "verifier-shared", "n", now, now.plusSeconds(300), "binding-hash");
+        flowRepo(KEY_RING_A).save(record);
+
+        // a node with a different keyring cannot open it, and the failed attempt must not consume it
+        assertThatThrownBy(() -> flowRepo(KEY_RING_OTHER).consume("pg-state-shared", now))
+                .isInstanceOf(FlowStateUnreadableException.class);
+        assertThatThrownBy(() -> flowRepo(KEY_RING_OTHER).consume("pg-state-shared", now))
+                .isInstanceOf(FlowStateUnreadableException.class);
+
+        // another node that holds the key (a "restarted" instance) still completes it, exactly once
+        Optional<FlowStateRecord> consumed = flowRepo(KEY_RING_A).consume("pg-state-shared", now);
+        assertThat(consumed).isPresent();
+        assertThat(consumed.get().codeVerifier()).isEqualTo("verifier-shared");
+        assertThat(consumed.get().bindingHash()).isEqualTo("binding-hash");
+        assertThat(flowRepo(KEY_RING_A).consume("pg-state-shared", now)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a verifier sealed for one state row does not open on another row")
+    void sealedVerifierIsBoundToItsRow() throws SQLException {
+        Instant now = Instant.now();
+        flowStateRepo.save(new FlowStateRecord("pg-state-src", "google", "https://app.exeris.eu/cb", null,
+                "verifier-src", null, now, now.plusSeconds(300), "b"));
+        flowStateRepo.save(new FlowStateRecord("pg-state-dst", "google", "https://app.exeris.eu/cb", null,
+                "verifier-dst", null, now, now.plusSeconds(300), "b"));
+        try (Statement stmt = jdbcConn.createStatement()) {
+            stmt.execute("UPDATE federated_flow_states SET encrypted_code_verifier = "
+                    + "(SELECT encrypted_code_verifier FROM federated_flow_states WHERE state_hash = 'pg-state-src') "
+                    + "WHERE state_hash = 'pg-state-dst'");
+        }
+
+        assertThatThrownBy(() -> flowStateRepo.consume("pg-state-dst", now)).isInstanceOf(FlowStateUnreadableException.class);
+        assertThat(flowStateRepo.consume("pg-state-src", now)).isPresent();
     }
 
     @Test
