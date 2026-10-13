@@ -3,7 +3,7 @@
   "stamp" : {
     "validated" : true,
     "compositionVersion" : "0.0.0",
-    "contentBinding" : "sha256:67a97d5e9b6dabda35632760ab6771f6642ae9b0f12200ee37ec15bf25187b81"
+    "contentBinding" : "sha256:737038e30fafec5701fbbd58392903953b5c6495415bbd6056cc56031b3bc532"
   },
   "modules" : [
     {
@@ -14,26 +14,26 @@
         "provides" : [
           {
             "service" : "eu.exeris.caps.federatedlogin.api.FederatedLoginFlow",
-            "version" : "1.0.0"
+            "version" : "0.1.0"
           },
           {
             "service" : "eu.exeris.caps.federatedlogin.api.ExternalIdentityLink",
-            "version" : "1.0.0"
+            "version" : "0.1.0"
           },
           {
             "service" : "eu.exeris.caps.federatedlogin.api.FederationProviderRegistry",
-            "version" : "1.0.0"
+            "version" : "0.1.0"
           }
         ],
         "requires" : [
           {
             "service" : "eu.exeris.caps.serviceboundarycore.api.RequestContext",
-            "versionRange" : "[1.0.0,2.0.0)",
+            "versionRange" : "[0.1.0,0.2.0)",
             "optional" : true
           },
           {
             "service" : "eu.exeris.caps.federatedlogin.spi.OutboundCredentialStore",
-            "versionRange" : "[1.0.0,2.0.0)",
+            "versionRange" : "[0.1.0,0.2.0)",
             "optional" : true
           },
           {
@@ -50,7 +50,7 @@
           },
           {
             "service" : "eu.exeris.caps.audittrail.api.AuditLogSink",
-            "versionRange" : "[1.0.0,2.0.0)",
+            "versionRange" : "[0.1.0,0.2.0)",
             "optional" : true
           }
         ],
@@ -62,7 +62,7 @@
     {
       "module" : "eu.exeris.caps.federatedlogin.FederatedLoginModule",
       "service" : "eu.exeris.caps.audittrail.api.AuditLogSink",
-      "versionRange" : "[1.0.0,2.0.0)",
+      "versionRange" : "[0.1.0,0.2.0)",
       "optional" : true,
       "satisfied" : false,
       "providers" : [ ]
@@ -70,7 +70,7 @@
     {
       "module" : "eu.exeris.caps.federatedlogin.FederatedLoginModule",
       "service" : "eu.exeris.caps.federatedlogin.spi.OutboundCredentialStore",
-      "versionRange" : "[1.0.0,2.0.0)",
+      "versionRange" : "[0.1.0,0.2.0)",
       "optional" : true,
       "satisfied" : false,
       "providers" : [ ]
@@ -78,7 +78,7 @@
     {
       "module" : "eu.exeris.caps.federatedlogin.FederatedLoginModule",
       "service" : "eu.exeris.caps.serviceboundarycore.api.RequestContext",
-      "versionRange" : "[1.0.0,2.0.0)",
+      "versionRange" : "[0.1.0,0.2.0)",
       "optional" : true,
       "satisfied" : false,
       "providers" : [ ]
@@ -112,9 +112,9 @@
     "eu.exeris.caps.federatedlogin.FederatedLoginModule"
   ],
   "warnings" : [
-    "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.caps.audittrail.api.AuditLogSink version [1.0.0,2.0.0) but no @CapabilityModule provides it (optional — skipped)",
-    "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.caps.federatedlogin.spi.OutboundCredentialStore version [1.0.0,2.0.0) but no @CapabilityModule provides it (optional — skipped)",
-    "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.caps.serviceboundarycore.api.RequestContext version [1.0.0,2.0.0) but no @CapabilityModule provides it (optional — skipped)",
+    "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.caps.audittrail.api.AuditLogSink version [0.1.0,0.2.0) but no @CapabilityModule provides it (optional — skipped)",
+    "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.caps.federatedlogin.spi.OutboundCredentialStore version [0.1.0,0.2.0) but no @CapabilityModule provides it (optional — skipped)",
+    "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.caps.serviceboundarycore.api.RequestContext version [0.1.0,0.2.0) but no @CapabilityModule provides it (optional — skipped)",
     "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.kernel.spi.http.HttpClientEngine but no @CapabilityModule provides it (optional — skipped)",
     "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.kernel.spi.persistence.TransactionalExecutor but no @CapabilityModule provides it (optional — skipped)",
     "module eu.exeris.caps.federatedlogin.FederatedLoginModule @Requires service eu.exeris.kernel.spi.security.identity.TokenValidator but no @CapabilityModule provides it (optional — skipped)"
