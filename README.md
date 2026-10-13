@@ -17,10 +17,29 @@ Behaviour worth knowing before composing it:
 - The token exchange uses the kernel `HttpClientEngine`, and OIDC ID-token verification uses a kernel `TokenValidator`; both are optional requirements the composition supplies.
 - Provider client credentials come from an interface this cap declares itself (`spi.OutboundCredentialStore`); an in-memory implementation ships in that package.
 - Storage is in memory unless a kernel `TransactionalExecutor` is supplied, in which case a PostgreSQL repository is used. The DDL is `src/main/resources/schema/federated-login-schema.sql`; nothing applies it automatically.
+- With PostgreSQL the PKCE verifier is sealed with AES-256-GCM, bound to the state, under a keyring every node must hold; construction fails without one. Consuming a state and opening it are one transaction, so a node that cannot open a state leaves it for one that can.
+- `initiateLogin` returns a `browserBinding`. The SKU sets it on the user agent that started the flow (for example as a `__Host-` cookie with `Secure`, `HttpOnly` and `SameSite=Lax`) and passes it back in `CallbackExchangeCommand`; a callback from any other user agent is rejected, which is what stops login CSRF. Only its hash is stored.
+- `redirectUri` must equal a configured URI for the provider and `targetPostLoginUrl` must be a relative path or on a configured origin; otherwise `initiateLogin` throws `InvalidRedirectException`. With no configuration every `initiateLogin` is rejected.
+- Exception messages carry the HTTP status and the OAuth `error` code, never a provider response body.
+- Account linking is the SKU's job. `ExternalIdentityLink.link` binds an identity to the subject it is given and does not authenticate that subject; call it only for a subject signed in during the current session, never from an email match.
+- Provider credentials come from `spi.OutboundCredentialStore`, declared by this cap and not by a separate outbound-credentials capability.
+
+## Configuration
+
+The module reads its configuration from the environment when it is constructed (or from the `Map` given to the constructor that takes one). A missing or malformed required value throws `FederatedLoginConfigurationException`, which names the key and never its value.
+
+| Key | Required | Meaning |
+|---|---|---|
+| `EXERIS_FEDERATED_LOGIN_STATE_KEYS` | with PostgreSQL | flow-state keyring, `<id>:<base64>[,<id>:<base64>…]` |
+| `EXERIS_FEDERATED_LOGIN_STATE_KEYS_FILE` | with PostgreSQL | path to a file holding the same keyring, such as a mounted secret |
+| `EXERIS_FEDERATED_LOGIN_REDIRECT_URIS` | to log in | `<provider>=<uri>[,<uri>…][;<provider>=…]`, exact callback URIs per provider |
+| `EXERIS_FEDERATED_LOGIN_POST_LOGIN_ORIGINS` | no | `<origin>[,<origin>…]` allowed for an absolute `targetPostLoginUrl` |
+
+Set exactly one of the two keyring keys. Each key must decode to 32 random bytes, for example from `openssl rand -base64 32`; the first entry seals new flow states and the later entries only open existing ones, so to rotate prepend a new entry and drop the old one once no flow of its age remains (a flow lives five minutes). Redirect URIs are `https`, or `http` on a loopback host, with no userinfo, query or fragment.
 
 ## Build & test
 
-Requires JDK 25 and Maven 3.9+.
+Requires JDK 25, Maven 3.9+ and a Docker daemon: `PostgresFederatedLoginLiveIT` starts PostgreSQL through Testcontainers and fails, rather than skips, when it cannot.
 
 ```bash
 mvn compile -Dexeris.codegen.skip=true   # pass 1 — the processor writes capability metadata
