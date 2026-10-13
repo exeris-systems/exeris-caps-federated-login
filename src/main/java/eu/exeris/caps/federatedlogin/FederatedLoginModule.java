@@ -2,8 +2,11 @@ package eu.exeris.caps.federatedlogin;
 
 import eu.exeris.caps.audittrail.api.AuditLogSink;
 import eu.exeris.caps.federatedlogin.api.ExternalIdentityLink;
+import eu.exeris.caps.federatedlogin.api.exception.FederatedLoginConfigurationException;
 import eu.exeris.caps.federatedlogin.api.FederatedLoginFlow;
 import eu.exeris.caps.federatedlogin.api.FederationProviderRegistry;
+import eu.exeris.caps.federatedlogin.internal.crypto.FlowStateCrypto;
+import eu.exeris.caps.federatedlogin.internal.crypto.FlowStateKeyring;
 import eu.exeris.caps.federatedlogin.internal.flow.DefaultFederatedLoginFlow;
 import eu.exeris.caps.federatedlogin.internal.provider.DefaultExternalIdentityLink;
 import eu.exeris.caps.federatedlogin.internal.provider.DefaultFederationProviderRegistry;
@@ -29,6 +32,7 @@ import eu.exeris.sdk.composition.lifecycle.CapabilityLifecycleHooks;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -80,7 +84,10 @@ public final class FederatedLoginModule implements CapabilityLifecycleHooks {
     }
 
     /**
-     * Constructor wiring with {@link TransactionalExecutor} for PostgreSQL persistence.
+     * Constructor wiring with {@link TransactionalExecutor} for PostgreSQL persistence, configured from
+     * the process environment.
+     *
+     * @see #FederatedLoginModule(Map, TransactionalExecutor, OutboundCredentialStore, HttpClientEngine, TokenValidator, AuditLogSink)
      */
     public FederatedLoginModule(
             TransactionalExecutor tx,
@@ -89,8 +96,30 @@ public final class FederatedLoginModule implements CapabilityLifecycleHooks {
             TokenValidator tokenValidator,
             AuditLogSink auditLogSink
     ) {
+        this(System.getenv(), tx, credentialStore, httpClient, tokenValidator, auditLogSink);
+    }
+
+    /**
+     * Constructor wiring with {@link TransactionalExecutor} for PostgreSQL persistence.
+     *
+     * <p>When {@code tx} is supplied, flow state is shared between nodes and survives a restart, so the
+     * PKCE verifier is sealed under a keyring that every node must hold:
+     * {@value FlowStateKeyring#ENV_KEYS} or {@value FlowStateKeyring#ENV_KEYS_FILE} in {@code environment}.
+     *
+     * @throws FederatedLoginConfigurationException when {@code tx} is supplied and the keyring is
+     *                                              missing or malformed
+     */
+    public FederatedLoginModule(
+            Map<String, String> environment,
+            TransactionalExecutor tx,
+            OutboundCredentialStore credentialStore,
+            HttpClientEngine httpClient,
+            TokenValidator tokenValidator,
+            AuditLogSink auditLogSink
+    ) {
         this(
-                tx != null ? new PostgresFlowStateRepository(tx) : new InMemoryFlowStateRepository(),
+                tx != null ? new PostgresFlowStateRepository(tx,
+                        new FlowStateCrypto(FlowStateKeyring.fromEnvironment(environment))) : new InMemoryFlowStateRepository(),
                 tx != null ? new PostgresExternalIdentityRepository(tx) : new InMemoryExternalIdentityRepository(),
                 new DefaultFederationProviderRegistry(List.of(new GoogleFederationProvider(), new GitHubFederationProvider())),
                 credentialStore != null ? credentialStore : new InMemoryOutboundCredentialStore(),

@@ -109,7 +109,8 @@ class PostgresFederatedLoginLiveIT {
             }
         };
 
-        flowStateRepo = new PostgresFlowStateRepository(tx);
+        flowStateRepo = new PostgresFlowStateRepository(tx, new eu.exeris.caps.federatedlogin.internal.crypto.FlowStateCrypto(
+                eu.exeris.caps.federatedlogin.internal.crypto.FlowStateKeyring.parse("it", "k1:" + java.util.Base64.getEncoder().encodeToString(new byte[32]))));
         identityRepo = new PostgresExternalIdentityRepository(tx);
     }
 

@@ -27,6 +27,8 @@ public interface FlowStateRepository {
      * @param stateHash SHA-256 hash of the flow state
      * @param now       current evaluation instant
      * @return consumed flow state record if present and not expired, empty otherwise
+     * @throws eu.exeris.caps.federatedlogin.api.exception.FlowStateUnreadableException if a stored state
+     *         cannot be opened; the state is then left in place rather than consumed
      */
     Optional<FlowStateRecord> consume(String stateHash, Instant now);
 

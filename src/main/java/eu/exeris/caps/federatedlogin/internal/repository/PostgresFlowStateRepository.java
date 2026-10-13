@@ -1,5 +1,6 @@
 package eu.exeris.caps.federatedlogin.internal.repository;
 
+import eu.exeris.caps.federatedlogin.api.exception.FlowStateUnreadableException;
 import eu.exeris.caps.federatedlogin.internal.crypto.FlowStateCrypto;
 import eu.exeris.kernel.spi.persistence.PersistenceStatement;
 import eu.exeris.kernel.spi.persistence.QueryResult;
@@ -9,12 +10,14 @@ import eu.exeris.kernel.spi.persistence.TransactionalExecutor;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * PostgreSQL implementation of {@link FlowStateRepository} utilizing {@link TransactionalExecutor}.
  *
- * <p>Encrypts code verifiers at rest with AES-256-GCM and uses atomic {@code DELETE ... RETURNING}
- * queries to guarantee strict single-use consumption and double-spend protection.
+ * <p>Seals code verifiers at rest with AES-256-GCM under a keyring shared by every node, bound to the
+ * state hash, and consumes a state with an atomic {@code DELETE ... RETURNING} inside a managed
+ * write, which guarantees single use. A state that cannot be opened is not consumed.
  *
  * @since 0.1.0
  */
@@ -22,10 +25,6 @@ public final class PostgresFlowStateRepository implements FlowStateRepository {
 
     private final TransactionalExecutor tx;
     private final FlowStateCrypto crypto;
-
-    public PostgresFlowStateRepository(TransactionalExecutor tx) {
-        this(tx, new FlowStateCrypto());
-    }
 
     public PostgresFlowStateRepository(TransactionalExecutor tx, FlowStateCrypto crypto) {
         this.tx = Objects.requireNonNull(tx, "tx must not be null");
@@ -35,7 +34,7 @@ public final class PostgresFlowStateRepository implements FlowStateRepository {
     @Override
     public void save(FlowStateRecord record) {
         Objects.requireNonNull(record, "record must not be null");
-        String encryptedVerifier = crypto.encrypt(record.codeVerifier());
+        String encryptedVerifier = crypto.encrypt(record.codeVerifier(), record.stateHash());
 
         tx.executeManaged(conn -> {
             try (PersistenceStatement stmt = conn.prepare(
@@ -81,15 +80,23 @@ public final class PostgresFlowStateRepository implements FlowStateRepository {
         if (stateHash == null) {
             return Optional.empty();
         }
-        return tx.query(conn -> {
-            try (PersistenceStatement stmt = conn.prepare(
-                    "DELETE FROM federated_flow_states " +
-                    "WHERE state_hash = $1 " +
-                    "RETURNING state_hash, provider_id, redirect_uri, target_post_login_url, encrypted_code_verifier, nonce, created_at, expires_at")) {
-                stmt.bindString(0, stateHash);
+        // The delete and the decrypt run in one managed write: a row that cannot be opened rolls back
+        // and stays for a node that holds the right key. The holder is reset on every attempt because
+        // the executor may retry the work.
+        AtomicReference<Optional<FlowStateRecord>> outcome = new AtomicReference<>(Optional.empty());
+        try {
+            tx.executeManaged(conn -> {
+                outcome.set(Optional.empty());
+                try (PersistenceStatement stmt = conn.prepare(
+                        "DELETE FROM federated_flow_states " +
+                        "WHERE state_hash = $1 " +
+                        "RETURNING state_hash, provider_id, redirect_uri, target_post_login_url, encrypted_code_verifier, nonce, created_at, expires_at")) {
+                    stmt.bindString(0, stateHash);
 
-                try (QueryResult rs = stmt.executeQuery()) {
-                    if (rs.next()) {
+                    try (QueryResult rs = stmt.executeQuery()) {
+                        if (!rs.next()) {
+                            return;
+                        }
                         RowCursor row = rs.row();
                         String hash = row.getString(0);
                         String providerId = row.getString(1);
@@ -101,14 +108,14 @@ public final class PostgresFlowStateRepository implements FlowStateRepository {
                         Instant expiresAt = row.getInstant(7);
 
                         if (!now.isBefore(expiresAt)) {
-                            return Optional.empty();
+                            return;
                         }
 
                         String decryptedVerifier = (encryptedVerifier != null && !encryptedVerifier.isBlank())
-                                ? crypto.decrypt(encryptedVerifier)
+                                ? crypto.decrypt(encryptedVerifier, hash)
                                 : null;
 
-                        return Optional.of(new FlowStateRecord(
+                        outcome.set(Optional.of(new FlowStateRecord(
                                 hash,
                                 providerId,
                                 redirectUri,
@@ -117,12 +124,19 @@ public final class PostgresFlowStateRepository implements FlowStateRepository {
                                 nonce,
                                 createdAt,
                                 expiresAt
-                        ));
+                        )));
                     }
-                    return Optional.empty();
+                }
+            });
+        } catch (RuntimeException e) {
+            for (Throwable t = e; t != null; t = t.getCause()) {
+                if (t instanceof FlowStateUnreadableException unreadable) {
+                    throw unreadable;
                 }
             }
-        });
+            throw e;
+        }
+        return outcome.get();
     }
 
     @Override
