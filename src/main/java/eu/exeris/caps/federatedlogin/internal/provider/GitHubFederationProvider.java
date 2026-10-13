@@ -129,19 +129,17 @@ public final class GitHubFederationProvider implements FederationProviderAdapter
         }
 
         if (tokenResponse.status().code() < 200 || tokenResponse.status().code() >= 300) {
-            throw new ProviderCommunicationException("GitHub token exchange failed: " + tokenResponseBody, tokenResponse.status().code());
+            throw new ProviderCommunicationException("GitHub token exchange failed (error: " + ProviderErrors.errorCode(tokenResponseBody) + ")", tokenResponse.status().code());
         }
 
         Map<String, Object> tokenMap = JsonReader.parseObject(tokenResponseBody);
         if (tokenMap.containsKey("error")) {
-            String error = String.valueOf(tokenMap.get("error"));
-            String desc = String.valueOf(tokenMap.getOrDefault("error_description", ""));
-            throw new ProviderCommunicationException("GitHub returned OAuth error: " + error + " (" + desc + ")");
+            throw new ProviderCommunicationException("GitHub returned OAuth error: " + ProviderErrors.errorCode(tokenMap));
         }
 
         String accessToken = (String) tokenMap.get("access_token");
         if (accessToken == null || accessToken.isBlank()) {
-            throw new ProviderCommunicationException("GitHub response missing access_token: " + tokenResponseBody);
+            throw new ProviderCommunicationException("GitHub response missing access_token", tokenResponse.status().code());
         }
 
         // 2. Fetch User Profile from /user
@@ -175,7 +173,7 @@ public final class GitHubFederationProvider implements FederationProviderAdapter
         }
 
         if (userResponse.status().code() < 200 || userResponse.status().code() >= 300) {
-            throw new ProviderCommunicationException("GitHub /user call failed: " + userResponseBody, userResponse.status().code());
+            throw new ProviderCommunicationException("GitHub /user call failed", userResponse.status().code());
         }
 
         Map<String, Object> userMap = JsonReader.parseObject(userResponseBody);
@@ -221,7 +219,7 @@ public final class GitHubFederationProvider implements FederationProviderAdapter
         }
 
         if (emailsResponse.status().code() == 401 || emailsResponse.status().code() >= 500) {
-            throw new ProviderCommunicationException("GitHub /user/emails call failed: " + emailsResponseBody, emailsResponse.status().code());
+            throw new ProviderCommunicationException("GitHub /user/emails call failed", emailsResponse.status().code());
         }
 
         String selectedEmail = baseEmail;
@@ -265,7 +263,7 @@ public final class GitHubFederationProvider implements FederationProviderAdapter
         }
 
         // 4. Privacy-masked email detection (Decision 1)
-        boolean isPrivacyMasked = selectedEmail != null && selectedEmail.toLowerCase().endsWith("@users.noreply.github.com");
+        boolean isPrivacyMasked = selectedEmail != null && selectedEmail.toLowerCase(java.util.Locale.ROOT).endsWith("@users.noreply.github.com");
 
         Map<String, Object> attributes = new LinkedHashMap<>(userMap);
         attributes.put("is_privacy_masked", isPrivacyMasked);
