@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS federated_flow_states (
     encrypted_code_verifier TEXT NOT NULL,
     nonce VARCHAR(255),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMPTZ NOT NULL
+    expires_at TIMESTAMPTZ NOT NULL,
+    browser_binding_hash VARCHAR(64) NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_federated_flow_states_expires

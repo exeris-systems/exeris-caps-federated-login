@@ -142,7 +142,8 @@ class PostgresFederatedLoginLiveIT {
                 "secret-pkce-verifier-12345",
                 "nonce-val-999",
                 now,
-                expiresAt
+                expiresAt,
+                "binding-hash"
         );
 
         flowStateRepo.save(record);
@@ -174,7 +175,8 @@ class PostgresFederatedLoginLiveIT {
                 null,
                 null,
                 now,
-                expiresAt
+                expiresAt,
+                "binding-hash"
         );
 
         flowStateRepo.save(record);
@@ -316,7 +318,8 @@ class PostgresFederatedLoginLiveIT {
                 "verifier-to-delete",
                 null,
                 now.minusSeconds(300),
-                expiredTime
+                expiredTime,
+                "binding-hash"
         );
 
         flowStateRepo.save(record);

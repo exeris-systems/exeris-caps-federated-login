@@ -39,8 +39,8 @@ public final class PostgresFlowStateRepository implements FlowStateRepository {
         tx.executeManaged(conn -> {
             try (PersistenceStatement stmt = conn.prepare(
                     "INSERT INTO federated_flow_states " +
-                    "(state_hash, provider_id, redirect_uri, target_post_login_url, encrypted_code_verifier, nonce, created_at, expires_at) " +
-                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) " +
+                    "(state_hash, provider_id, redirect_uri, target_post_login_url, encrypted_code_verifier, nonce, created_at, expires_at, browser_binding_hash) " +
+                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) " +
                     "ON CONFLICT (state_hash) DO UPDATE SET " +
                     "provider_id = EXCLUDED.provider_id, " +
                     "redirect_uri = EXCLUDED.redirect_uri, " +
@@ -48,7 +48,8 @@ public final class PostgresFlowStateRepository implements FlowStateRepository {
                     "encrypted_code_verifier = EXCLUDED.encrypted_code_verifier, " +
                     "nonce = EXCLUDED.nonce, " +
                     "created_at = EXCLUDED.created_at, " +
-                    "expires_at = EXCLUDED.expires_at")) {
+                    "expires_at = EXCLUDED.expires_at, " +
+                    "browser_binding_hash = EXCLUDED.browser_binding_hash")) {
                 stmt.bindString(0, record.stateHash())
                     .bindString(1, record.providerId())
                     .bindString(2, record.redirectUri());
@@ -68,7 +69,8 @@ public final class PostgresFlowStateRepository implements FlowStateRepository {
                 }
 
                 stmt.bindInstant(6, record.createdAt())
-                    .bindInstant(7, record.expiresAt());
+                    .bindInstant(7, record.expiresAt())
+                    .bindString(8, record.bindingHash());
 
                 stmt.executeUpdate();
             }
@@ -90,7 +92,7 @@ public final class PostgresFlowStateRepository implements FlowStateRepository {
                 try (PersistenceStatement stmt = conn.prepare(
                         "DELETE FROM federated_flow_states " +
                         "WHERE state_hash = $1 " +
-                        "RETURNING state_hash, provider_id, redirect_uri, target_post_login_url, encrypted_code_verifier, nonce, created_at, expires_at")) {
+                        "RETURNING state_hash, provider_id, redirect_uri, target_post_login_url, encrypted_code_verifier, nonce, created_at, expires_at, browser_binding_hash")) {
                     stmt.bindString(0, stateHash);
 
                     try (QueryResult rs = stmt.executeQuery()) {
@@ -106,6 +108,7 @@ public final class PostgresFlowStateRepository implements FlowStateRepository {
                         String nonce = row.isNull(5) ? null : row.getString(5);
                         Instant createdAt = row.getInstant(6);
                         Instant expiresAt = row.getInstant(7);
+                        String bindingHash = row.getString(8);
 
                         if (!now.isBefore(expiresAt)) {
                             return;
@@ -123,7 +126,8 @@ public final class PostgresFlowStateRepository implements FlowStateRepository {
                                 decryptedVerifier,
                                 nonce,
                                 createdAt,
-                                expiresAt
+                                expiresAt,
+                                bindingHash
                         )));
                     }
                 }

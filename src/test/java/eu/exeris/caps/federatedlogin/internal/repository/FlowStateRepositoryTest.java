@@ -26,7 +26,8 @@ class FlowStateRepositoryTest {
                 "verifier-abc",
                 "nonce-xyz",
                 now,
-                expiresAt
+                expiresAt,
+                "binding-hash"
         );
 
         repository.save(record);
@@ -58,7 +59,8 @@ class FlowStateRepositoryTest {
                 "verifier-exp",
                 null,
                 now.minusSeconds(60),
-                expiresAt
+                expiresAt,
+                "binding-hash"
         );
 
         repository.save(record);
@@ -73,8 +75,8 @@ class FlowStateRepositoryTest {
         InMemoryFlowStateRepository repository = new InMemoryFlowStateRepository();
         Instant now = Instant.now();
 
-        repository.save(new FlowStateRecord("hash-expired", "google", "https://cb", null, "v", null, now.minusSeconds(300), now.minusSeconds(10)));
-        repository.save(new FlowStateRecord("hash-live", "github", "https://cb", null, "v", null, now, now.plusSeconds(300)));
+        repository.save(new FlowStateRecord("hash-expired", "google", "https://cb", null, "v", null, now.minusSeconds(300), now.minusSeconds(10), "b"));
+        repository.save(new FlowStateRecord("hash-live", "github", "https://cb", null, "v", null, now, now.plusSeconds(300), "b"));
 
         repository.pruneExpired(now);
 

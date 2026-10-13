@@ -119,6 +119,30 @@ class DefaultFederatedLoginFlowTest {
     }
 
     @Test
+    @DisplayName("callback from a user agent without the browser binding is rejected and burns the state")
+    void callbackWithoutBindingRejected() {
+        AuthorizationInitResult init = flow.initiateLogin("test-provider", "https://app.exeris.eu/cb", "/home");
+        CallbackExchangeCommand foreign = new CallbackExchangeCommand(
+                "test-provider", "code", init.state(), "https://app.exeris.eu/cb", "attacker-supplied-binding");
+
+        assertThatThrownBy(() -> flow.processCallback(foreign)).isInstanceOf(InvalidStateException.class);
+        // state and binding are one-time: the legitimate callback cannot reuse the burnt state
+        CallbackExchangeCommand legitimate = new CallbackExchangeCommand(
+                "test-provider", "code", init.state(), "https://app.exeris.eu/cb", init.browserBinding());
+        assertThatThrownBy(() -> flow.processCallback(legitimate)).isInstanceOf(InvalidStateException.class);
+    }
+
+    @Test
+    @DisplayName("each flow gets its own unguessable browser binding, and it is not the state")
+    void bindingsAreDistinct() {
+        AuthorizationInitResult a = flow.initiateLogin("test-provider", "https://app.exeris.eu/cb", null);
+        AuthorizationInitResult b = flow.initiateLogin("test-provider", "https://app.exeris.eu/cb", null);
+
+        assertThat(a.browserBinding()).hasSizeGreaterThanOrEqualTo(43).isNotEqualTo(a.state()).isNotEqualTo(b.browserBinding());
+        assertThat(a.authorizationUri()).doesNotContain(a.browserBinding());
+    }
+
+    @Test
     @DisplayName("initiateLogin persists encrypted state and produces authorization result")
     void initiateLogin() {
         AuthorizationInitResult initResult = flow.initiateLogin(
@@ -147,7 +171,8 @@ class DefaultFederatedLoginFlowTest {
                 "test-provider",
                 "auth-code-test",
                 initResult.state(),
-                "https://app.exeris.eu/cb"
+                "https://app.exeris.eu/cb",
+                initResult.browserBinding()
         );
 
         FederatedLoginResult result = flow.processCallback(command);
@@ -174,7 +199,8 @@ class DefaultFederatedLoginFlowTest {
                 "test-provider",
                 "code-xyz",
                 initResult.state(),
-                "https://app.exeris.eu/cb"
+                "https://app.exeris.eu/cb",
+                initResult.browserBinding()
         );
 
         FederatedLoginResult result = flow.processCallback(command);
@@ -197,7 +223,8 @@ class DefaultFederatedLoginFlowTest {
                 "test-provider",
                 "code-1",
                 initResult.state(),
-                "https://app.exeris.eu/cb"
+                "https://app.exeris.eu/cb",
+                initResult.browserBinding()
         );
 
         // First callback succeeds
@@ -222,7 +249,8 @@ class DefaultFederatedLoginFlowTest {
                 "test-provider",
                 "code-1",
                 "tampered-state-token-xyz",
-                "https://app.exeris.eu/cb"
+                "https://app.exeris.eu/cb",
+                "tampered-binding"
         );
 
         assertThatThrownBy(() -> flow.processCallback(tamperedCommand))
@@ -242,7 +270,8 @@ class DefaultFederatedLoginFlowTest {
                 "test-provider",
                 "code-1",
                 initResult.state(),
-                "https://app.exeris.eu/different-cb"
+                "https://app.exeris.eu/different-cb",
+                initResult.browserBinding()
         );
 
         assertThatThrownBy(() -> flow.processCallback(mismatchCommand))
@@ -266,7 +295,8 @@ class DefaultFederatedLoginFlowTest {
                 "other-provider",
                 "code-1",
                 initResult.state(),
-                "https://app.exeris.eu/cb"
+                "https://app.exeris.eu/cb",
+                initResult.browserBinding()
         );
 
         assertThatThrownBy(() -> flow.processCallback(mismatchCommand))
@@ -301,7 +331,8 @@ class DefaultFederatedLoginFlowTest {
                 "test-provider",
                 "code-1",
                 initResult.state(),
-                "https://app.exeris.eu/cb"
+                "https://app.exeris.eu/cb",
+                initResult.browserBinding()
         );
 
         assertThatThrownBy(() -> shortLivedFlow.processCallback(command))
@@ -338,7 +369,8 @@ class DefaultFederatedLoginFlowTest {
                 "test-provider",
                 "code-1",
                 initResult.state(),
-                "https://app.exeris.eu/wrong-cb"
+                "https://app.exeris.eu/wrong-cb",
+                initResult.browserBinding()
         );
 
         assertThatThrownBy(() -> flow.processCallback(mismatchRedirect))
