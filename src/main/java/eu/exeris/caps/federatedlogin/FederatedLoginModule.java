@@ -47,15 +47,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @CapabilityModule
 @CapabilityLifecycle
-@Provides(service = FederatedLoginFlow.class, version = "1.0.0")
-@Provides(service = ExternalIdentityLink.class, version = "1.0.0")
-@Provides(service = FederationProviderRegistry.class, version = "1.0.0")
-@Requires(service = RequestContext.class, versionRange = "[1.0.0,2.0.0)", optional = true)
-@Requires(service = OutboundCredentialStore.class, versionRange = "[1.0.0,2.0.0)", optional = true)
+@Provides(service = FederatedLoginFlow.class, version = "0.1.0")
+@Provides(service = ExternalIdentityLink.class, version = "0.1.0")
+@Provides(service = FederationProviderRegistry.class, version = "0.1.0")
+@Requires(service = RequestContext.class, versionRange = "[0.1.0,0.2.0)", optional = true)
+@Requires(service = OutboundCredentialStore.class, versionRange = "[0.1.0,0.2.0)", optional = true)
 @Requires(service = HttpClientEngine.class, optional = true)
 @Requires(service = TokenValidator.class, optional = true)
 @Requires(service = TransactionalExecutor.class, optional = true)
-@Requires(service = AuditLogSink.class, versionRange = "[1.0.0,2.0.0)", optional = true)
+@Requires(service = AuditLogSink.class, versionRange = "[0.1.0,0.2.0)", optional = true)
 public final class FederatedLoginModule implements CapabilityLifecycleHooks {
 
     private final FederatedLoginFlow federatedLoginFlow;
