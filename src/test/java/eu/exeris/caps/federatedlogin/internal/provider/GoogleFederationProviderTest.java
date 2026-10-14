@@ -360,4 +360,91 @@ class GoogleFederationProviderTest {
                 .isInstanceOf(TokenValidationException.class)
                 .hasMessageContaining("expired");
     }
+
+    private static ProviderExchangeRequest googleRequest(HttpClientEngine client, TokenValidator validator) {
+        return new ProviderExchangeRequest("code", "https://cb", "verifier", null, "google-client-id", "secret", client, validator);
+    }
+
+    private static MockHttpClient googleResponds(HttpStatus status, String body) {
+        return new MockHttpClient(new HttpResponse(status, HttpVersion.HTTP_1_1, List.of(), HeapLoanedBuffer.of(body)));
+    }
+
+    @Test
+    @DisplayName("error messages carry the status and the OAuth error code, never the response body")
+    void errorsDoNotEmbedProviderBody() {
+        GoogleFederationProvider provider = new GoogleFederationProvider();
+        String leaky = "{\"error\": \"invalid_grant\", \"access_token\": \"ya29.SECRET\", \"refresh_token\": \"1//SECRET\"}";
+
+        assertThatThrownBy(() -> provider.processExchange(googleRequest(googleResponds(HttpStatus.BAD_REQUEST, leaky), buffer -> null)))
+                .isInstanceOf(ProviderCommunicationException.class)
+                .hasMessageContaining("invalid_grant").hasMessageContaining("400")
+                .hasMessageNotContaining("SECRET");
+
+        String noIdToken = "{\"access_token\": \"ya29.SECRET\", \"refresh_token\": \"1//SECRET\"}";
+        assertThatThrownBy(() -> provider.processExchange(googleRequest(googleResponds(HttpStatus.OK, noIdToken), buffer -> null)))
+                .isInstanceOf(ProviderCommunicationException.class)
+                .hasMessageContaining("missing id_token").hasMessageNotContaining("SECRET");
+
+        assertThatThrownBy(() -> provider.processExchange(googleRequest(
+                googleResponds(HttpStatus.BAD_REQUEST, "<html>ya29.SECRET</html>"), buffer -> null)))
+                .isInstanceOf(ProviderCommunicationException.class)
+                .hasMessageContaining("unspecified").hasMessageNotContaining("SECRET");
+    }
+
+    @Test
+    @DisplayName("the returned identity attributes carry no token from the exchange response")
+    void identityAttributesCarryNoTokens() {
+        GoogleFederationProvider provider = new GoogleFederationProvider();
+        String body = "{\"access_token\": \"ya29.SECRET\", \"id_token\": \"a.b.c\", \"refresh_token\": \"r\", \"token_type\": \"Bearer\"}";
+
+        FederatedIdentity identity = provider.processExchange(googleRequest(googleResponds(HttpStatus.OK, body),
+                buffer -> new MockVerifiedClaims("sub-1", "https://accounts.google.com", Map.of())));
+
+        assertThat(identity.rawAttributes()).containsEntry("token_type", "Bearer")
+                .doesNotContainKeys("access_token", "id_token", "refresh_token");
+    }
+
+    @Test
+    @DisplayName("a nonce mismatch message does not echo the nonces")
+    void nonceMessageDoesNotEchoValues() {
+        GoogleFederationProvider provider = new GoogleFederationProvider();
+        ProviderExchangeRequest request = new ProviderExchangeRequest("code", "https://cb", "verifier", "expected-nonce-VALUE",
+                "google-client-id", "secret", googleResponds(HttpStatus.OK, "{\"id_token\": \"a.b.c\"}"),
+                buffer -> new MockVerifiedClaims("sub-1", "https://accounts.google.com", Map.of("nonce", "other-nonce-VALUE")));
+
+        assertThatThrownBy(() -> provider.processExchange(request))
+                .isInstanceOf(TokenValidationException.class)
+                .hasMessageNotContaining("VALUE");
+    }
+
+    @Test
+    @DisplayName("several audiences require the authorized party to be this client")
+    void authorizedPartyRequiredWithSeveralAudiences() {
+        GoogleFederationProvider provider = new GoogleFederationProvider();
+        String body = "{\"id_token\": \"a.b.c\"}";
+        Set<String> both = Set.of("google-client-id", "other-audience");
+
+        assertThatThrownBy(() -> provider.processExchange(googleRequest(googleResponds(HttpStatus.OK, body),
+                buffer -> new MockVerifiedClaims("s", "https://accounts.google.com", both, Instant.now().plusSeconds(60), Map.of()))))
+                .isInstanceOf(TokenValidationException.class).hasMessageContaining("authorized party");
+        assertThatThrownBy(() -> provider.processExchange(googleRequest(googleResponds(HttpStatus.OK, body),
+                buffer -> new MockVerifiedClaims("s", "https://accounts.google.com", both, Instant.now().plusSeconds(60),
+                        Map.of("azp", "someone-else")))))
+                .isInstanceOf(TokenValidationException.class).hasMessageContaining("authorized party");
+
+        FederatedIdentity ok = provider.processExchange(googleRequest(googleResponds(HttpStatus.OK, body),
+                buffer -> new MockVerifiedClaims("s", "https://accounts.google.com", both, Instant.now().plusSeconds(60),
+                        Map.of("azp", "google-client-id"))));
+        assertThat(ok.externalSubject()).isEqualTo("s");
+    }
+
+    @Test
+    @DisplayName("an ID token without an exp claim is rejected")
+    void missingExpRejected() {
+        GoogleFederationProvider provider = new GoogleFederationProvider();
+
+        assertThatThrownBy(() -> provider.processExchange(googleRequest(googleResponds(HttpStatus.OK, "{\"id_token\": \"a.b.c\"}"),
+                buffer -> new MockVerifiedClaims("s", "https://accounts.google.com", Set.of("google-client-id"), null, Map.of()))))
+                .isInstanceOf(TokenValidationException.class).hasMessageContaining("exp");
+    }
 }

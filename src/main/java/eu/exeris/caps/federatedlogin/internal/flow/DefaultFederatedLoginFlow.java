@@ -18,6 +18,8 @@ import eu.exeris.caps.federatedlogin.spi.OutboundCredentialStore;
 import eu.exeris.kernel.spi.http.HttpClientEngine;
 import eu.exeris.kernel.spi.security.identity.TokenValidator;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -44,6 +46,7 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
     private final HttpClientEngine httpClient;
     private final TokenValidator tokenValidator;
     private final AuditTrailBridge auditTrail;
+    private final RedirectPolicy redirectPolicy;
     private final Duration flowTtl;
 
     public DefaultFederatedLoginFlow(
@@ -53,10 +56,11 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
             OutboundCredentialStore credentialStore,
             HttpClientEngine httpClient,
             TokenValidator tokenValidator,
-            AuditTrailBridge auditTrail
+            AuditTrailBridge auditTrail,
+            RedirectPolicy redirectPolicy
     ) {
         this(providerRegistry, flowStateRepository, externalIdentityLink, credentialStore,
-                httpClient, tokenValidator, auditTrail, DEFAULT_FLOW_TTL);
+                httpClient, tokenValidator, auditTrail, redirectPolicy, DEFAULT_FLOW_TTL);
     }
 
     public DefaultFederatedLoginFlow(
@@ -67,6 +71,7 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
             HttpClientEngine httpClient,
             TokenValidator tokenValidator,
             AuditTrailBridge auditTrail,
+            RedirectPolicy redirectPolicy,
             Duration flowTtl
     ) {
         this.providerRegistry = Objects.requireNonNull(providerRegistry, "providerRegistry must not be null");
@@ -76,6 +81,7 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
         this.httpClient = httpClient;
         this.tokenValidator = tokenValidator;
         this.auditTrail = auditTrail;
+        this.redirectPolicy = Objects.requireNonNull(redirectPolicy, "redirectPolicy must not be null");
         this.flowTtl = flowTtl != null ? flowTtl : DEFAULT_FLOW_TTL;
     }
 
@@ -92,6 +98,9 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
 
         FederationProviderAdapter adapter = providerRegistry.getProvider(providerId);
 
+        redirectPolicy.requireRegisteredRedirectUri(providerId, redirectUri);
+        redirectPolicy.requireSafePostLoginUrl(targetPostLoginUrl);
+
         OutboundCredentialStore.ProviderClientCredentials credentials = credentialStore.getCredentials(providerId)
                 .orElseThrow(() -> new ProviderCommunicationException("No client credentials registered for provider: " + providerId));
 
@@ -100,6 +109,7 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
         String codeVerifier = adapter.metadata().supportsPkce() ? PkceGenerator.generateCodeVerifier() : null;
         String codeChallenge = codeVerifier != null ? PkceGenerator.generateCodeChallenge(codeVerifier) : null;
 
+        String browserBinding = PkceGenerator.generateState();
         String stateHash = PkceGenerator.computeStateHash(state);
         Instant now = Instant.now();
         Instant expiresAt = now.plus(flowTtl);
@@ -112,7 +122,8 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
                 codeVerifier,
                 nonce,
                 now,
-                expiresAt
+                expiresAt,
+                PkceGenerator.computeStateHash(browserBinding)
         );
 
         flowStateRepository.save(record);
@@ -132,7 +143,7 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
             ));
         }
 
-        return new AuthorizationInitResult(authorizationUri, state);
+        return new AuthorizationInitResult(authorizationUri, state, browserBinding);
     }
 
     @Override
@@ -156,7 +167,20 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
 
         FlowStateRecord flow = consumed.get();
 
-        // 2. Validate provider matching
+        // 2. The callback must come from the user agent that started the flow (login CSRF)
+        byte[] presented = PkceGenerator.computeStateHash(command.browserBinding()).getBytes(StandardCharsets.UTF_8);
+        byte[] expected = flow.bindingHash().getBytes(StandardCharsets.UTF_8);
+        if (!MessageDigest.isEqual(presented, expected)) {
+            if (auditTrail != null) {
+                auditTrail.emit("FEDERATED_LOGIN_REJECTED", "system", Map.of(
+                        "provider_id", command.providerId(),
+                        "reason", "browser_binding_mismatch"
+                ));
+            }
+            throw new InvalidStateException("Federated flow was not started by this user agent");
+        }
+
+        // 3. Validate provider matching
         if (!flow.providerId().equals(command.providerId())) {
             if (auditTrail != null) {
                 auditTrail.emit("FEDERATED_LOGIN_REJECTED", "system", Map.of(
@@ -168,7 +192,7 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
                     + " but received " + command.providerId());
         }
 
-        // 3. Validate redirect URI matching
+        // 4. Validate redirect URI matching
         if (!flow.redirectUri().equals(command.redirectUri())) {
             if (auditTrail != null) {
                 auditTrail.emit("FEDERATED_LOGIN_REJECTED", "system", Map.of(
@@ -180,12 +204,12 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
                     + " but received " + command.redirectUri());
         }
 
-        // 4. Resolve adapter and credentials
+        // 5. Resolve adapter and credentials
         FederationProviderAdapter adapter = providerRegistry.getProvider(command.providerId());
         OutboundCredentialStore.ProviderClientCredentials credentials = credentialStore.getCredentials(command.providerId())
                 .orElseThrow(() -> new ProviderCommunicationException("No client credentials registered for provider: " + command.providerId()));
 
-        // 5. Exchange code for identity
+        // 6. Exchange code for identity
         ProviderExchangeRequest exchangeRequest = new ProviderExchangeRequest(
                 command.code(),
                 command.redirectUri(),
@@ -199,7 +223,7 @@ public final class DefaultFederatedLoginFlow implements FederatedLoginFlow {
 
         FederatedIdentity identity = adapter.processExchange(exchangeRequest);
 
-        // 6. Pre-account takeover protection (ADR-099): link look up strictly by (issuer, externalSubject)
+        // 7. Pre-account takeover protection (ADR-099): link look up strictly by (issuer, externalSubject)
         Optional<UUID> linkedSubjectId = externalIdentityLink.findLinkedSubject(identity.issuer(), identity.externalSubject());
 
         FederatedLoginResult result = linkedSubjectId

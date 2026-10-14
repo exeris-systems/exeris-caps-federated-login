@@ -2,9 +2,13 @@ package eu.exeris.caps.federatedlogin;
 
 import eu.exeris.caps.audittrail.api.AuditLogSink;
 import eu.exeris.caps.federatedlogin.api.ExternalIdentityLink;
+import eu.exeris.caps.federatedlogin.api.exception.FederatedLoginConfigurationException;
 import eu.exeris.caps.federatedlogin.api.FederatedLoginFlow;
 import eu.exeris.caps.federatedlogin.api.FederationProviderRegistry;
+import eu.exeris.caps.federatedlogin.internal.crypto.FlowStateCrypto;
+import eu.exeris.caps.federatedlogin.internal.crypto.FlowStateKeyring;
 import eu.exeris.caps.federatedlogin.internal.flow.DefaultFederatedLoginFlow;
+import eu.exeris.caps.federatedlogin.internal.flow.RedirectPolicy;
 import eu.exeris.caps.federatedlogin.internal.provider.DefaultExternalIdentityLink;
 import eu.exeris.caps.federatedlogin.internal.provider.DefaultFederationProviderRegistry;
 import eu.exeris.caps.federatedlogin.internal.provider.GitHubFederationProvider;
@@ -18,7 +22,6 @@ import eu.exeris.caps.federatedlogin.internal.repository.PostgresFlowStateReposi
 import eu.exeris.caps.federatedlogin.spi.AuditTrailBridge;
 import eu.exeris.caps.federatedlogin.spi.InMemoryOutboundCredentialStore;
 import eu.exeris.caps.federatedlogin.spi.OutboundCredentialStore;
-import eu.exeris.caps.serviceboundarycore.api.RequestContext;
 import eu.exeris.kernel.spi.http.HttpClientEngine;
 import eu.exeris.kernel.spi.persistence.TransactionalExecutor;
 import eu.exeris.kernel.spi.security.identity.TokenValidator;
@@ -30,6 +33,7 @@ import eu.exeris.sdk.composition.lifecycle.CapabilityLifecycleHooks;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -50,7 +54,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Provides(service = FederatedLoginFlow.class, version = "0.1.0")
 @Provides(service = ExternalIdentityLink.class, version = "0.1.0")
 @Provides(service = FederationProviderRegistry.class, version = "0.1.0")
-@Requires(service = RequestContext.class, versionRange = "[0.1.0,0.2.0)", optional = true)
 @Requires(service = OutboundCredentialStore.class, versionRange = "[0.1.0,0.2.0)", optional = true)
 @Requires(service = HttpClientEngine.class, optional = true)
 @Requires(service = TokenValidator.class, optional = true)
@@ -77,12 +80,16 @@ public final class FederatedLoginModule implements CapabilityLifecycleHooks {
                 new InMemoryOutboundCredentialStore(),
                 null,
                 null,
-                null
+                null,
+                RedirectPolicy.fromEnvironment(System.getenv())
         );
     }
 
     /**
-     * Constructor wiring with {@link TransactionalExecutor} for PostgreSQL persistence.
+     * Constructor wiring with {@link TransactionalExecutor} for PostgreSQL persistence, configured from
+     * the process environment.
+     *
+     * @see #FederatedLoginModule(Map, TransactionalExecutor, OutboundCredentialStore, HttpClientEngine, TokenValidator, AuditLogSink)
      */
     public FederatedLoginModule(
             TransactionalExecutor tx,
@@ -91,28 +98,56 @@ public final class FederatedLoginModule implements CapabilityLifecycleHooks {
             TokenValidator tokenValidator,
             AuditLogSink auditLogSink
     ) {
+        this(System.getenv(), tx, credentialStore, httpClient, tokenValidator, auditLogSink);
+    }
+
+    /**
+     * Constructor wiring with {@link TransactionalExecutor} for PostgreSQL persistence.
+     *
+     * <p>When {@code tx} is supplied, flow state is shared between nodes and survives a restart, so the
+     * PKCE verifier is sealed under a keyring that every node must hold:
+     * {@value FlowStateKeyring#ENV_KEYS} or {@value FlowStateKeyring#ENV_KEYS_FILE} in {@code environment}.
+     *
+     * <p>The redirect URIs a flow may use are an allow-list read from
+     * {@value RedirectPolicy#ENV_REDIRECT_URIS} and {@value RedirectPolicy#ENV_POST_LOGIN_ORIGINS}; with
+     * neither set, every {@code initiateLogin} is rejected.
+     *
+     * @throws FederatedLoginConfigurationException when {@code tx} is supplied and the keyring is
+     *                                              missing or malformed
+     */
+    public FederatedLoginModule(
+            Map<String, String> environment,
+            TransactionalExecutor tx,
+            OutboundCredentialStore credentialStore,
+            HttpClientEngine httpClient,
+            TokenValidator tokenValidator,
+            AuditLogSink auditLogSink
+    ) {
         this(
-                tx != null ? new PostgresFlowStateRepository(tx) : new InMemoryFlowStateRepository(),
+                tx != null ? new PostgresFlowStateRepository(tx,
+                        new FlowStateCrypto(FlowStateKeyring.fromEnvironment(environment))) : new InMemoryFlowStateRepository(),
                 tx != null ? new PostgresExternalIdentityRepository(tx) : new InMemoryExternalIdentityRepository(),
                 new DefaultFederationProviderRegistry(List.of(new GoogleFederationProvider(), new GitHubFederationProvider())),
                 credentialStore != null ? credentialStore : new InMemoryOutboundCredentialStore(),
                 httpClient,
                 tokenValidator,
-                auditLogSink != null ? new AuditTrailBridge(auditLogSink) : null
+                auditLogSink != null ? new AuditTrailBridge(auditLogSink) : null,
+                RedirectPolicy.fromEnvironment(environment)
         );
     }
 
     /**
-     * Full custom wiring constructor.
+     * Full custom wiring constructor; package-private because its parameters are internal types.
      */
-    public FederatedLoginModule(
+    FederatedLoginModule(
             FlowStateRepository flowStateRepository,
             ExternalIdentityRepository identityRepository,
             FederationProviderRegistry providerRegistry,
             OutboundCredentialStore credentialStore,
             HttpClientEngine httpClient,
             TokenValidator tokenValidator,
-            AuditTrailBridge auditTrail
+            AuditTrailBridge auditTrail,
+            RedirectPolicy redirectPolicy
     ) {
         Objects.requireNonNull(flowStateRepository, "flowStateRepository must not be null");
         Objects.requireNonNull(identityRepository, "identityRepository must not be null");
@@ -128,7 +163,8 @@ public final class FederatedLoginModule implements CapabilityLifecycleHooks {
                 credentialStore,
                 httpClient,
                 tokenValidator,
-                auditTrail
+                auditTrail,
+                redirectPolicy
         );
     }
 

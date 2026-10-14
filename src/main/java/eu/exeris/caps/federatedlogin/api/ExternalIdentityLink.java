@@ -42,6 +42,11 @@ public interface ExternalIdentityLink {
     /**
      * Establishes a binding between a local subject and an external provider identity.
      *
+     * <p>This service does not authenticate {@code localSubjectId}. Call it only for a subject that has
+     * authenticated in the current session, never because an email address matches: binding an identity
+     * to an account it did not sign in to is account takeover. {@code emailVerified} is stored, not
+     * enforced.
+     *
      * @param localSubjectId  local user/subject identifier
      * @param issuer          provider issuer URI
      * @param externalSubject external subject ID

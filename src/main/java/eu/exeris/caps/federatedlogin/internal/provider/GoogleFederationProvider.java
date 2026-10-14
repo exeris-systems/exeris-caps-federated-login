@@ -134,19 +134,17 @@ public final class GoogleFederationProvider implements FederationProviderAdapter
         }
 
         if (httpResponse.status().code() < 200 || httpResponse.status().code() >= 300) {
-            throw new ProviderCommunicationException("Google token exchange failed: " + responseBody, httpResponse.status().code());
+            throw new ProviderCommunicationException("Google token exchange failed (error: " + ProviderErrors.errorCode(responseBody) + ")", httpResponse.status().code());
         }
 
         Map<String, Object> tokenPayload = JsonReader.parseObject(responseBody);
         if (tokenPayload.containsKey("error")) {
-            String error = String.valueOf(tokenPayload.get("error"));
-            String desc = String.valueOf(tokenPayload.getOrDefault("error_description", ""));
-            throw new ProviderCommunicationException("Google returned OAuth error: " + error + " (" + desc + ")");
+            throw new ProviderCommunicationException("Google returned OAuth error: " + ProviderErrors.errorCode(tokenPayload));
         }
 
         String idToken = (String) tokenPayload.get("id_token");
         if (idToken == null || idToken.isBlank()) {
-            throw new ProviderCommunicationException("Google token response missing id_token: " + responseBody);
+            throw new ProviderCommunicationException("Google token response missing id_token", httpResponse.status().code());
         }
 
         // 2. Cryptographic ID Token validation via TokenValidator
@@ -154,33 +152,39 @@ public final class GoogleFederationProvider implements FederationProviderAdapter
         try {
             claims = request.tokenValidator().validate(HeapLoanedBuffer.of(idToken));
         } catch (Exception e) {
-            throw new TokenValidationException("Google ID token signature/claims verification failed: " + e.getMessage(), e);
+            throw new TokenValidationException("Google ID token signature/claims verification failed", e);
         }
 
         // 3. Verify audience (OIDC Core 1.0 § 3.1.3.7 - prevent Confused Deputy)
         java.util.Set<String> audience = claims.audience();
         if (audience == null || !audience.contains(request.clientId())) {
-            throw new TokenValidationException("Google ID token audience mismatch: expected client_id "
-                    + request.clientId() + " but token audience is " + audience);
+            throw new TokenValidationException("Google ID token audience mismatch");
+        }
+
+        // OIDC Core 1.0 § 3.1.3.7: with several audiences the authorized party must be this client
+        if (audience.size() > 1 && !claims.claim("azp").map(request.clientId()::equals).orElse(false)) {
+            throw new TokenValidationException("Google ID token authorized party mismatch");
         }
 
         // 4. Verify issuer
         String tokenIssuer = claims.issuer();
         if (!ISSUER.equals(tokenIssuer) && !"accounts.google.com".equals(tokenIssuer)) {
-            throw new TokenValidationException("Google ID token issuer mismatch: " + tokenIssuer);
+            throw new TokenValidationException("Google ID token issuer mismatch");
         }
 
         // 5. Assert nonce
         if (request.nonce() != null && !request.nonce().isBlank()) {
             Optional<String> tokenNonce = claims.claim("nonce");
             if (tokenNonce.isEmpty() || !request.nonce().equals(tokenNonce.get())) {
-                throw new TokenValidationException("OIDC nonce mismatch: expected " + request.nonce()
-                        + " but got " + tokenNonce.orElse("[none]"));
+                throw new TokenValidationException("OIDC nonce mismatch");
             }
         }
 
         // 6. Assert token not expired
-        if (claims.expiresAt().isPresent() && !claims.expiresAt().get().isAfter(java.time.Instant.now())) {
+        if (claims.expiresAt().isEmpty()) {
+            throw new TokenValidationException("Google ID token has no exp claim");
+        }
+        if (!claims.expiresAt().get().isAfter(java.time.Instant.now())) {
             throw new TokenValidationException("Google ID token is expired");
         }
 
@@ -202,7 +206,7 @@ public final class GoogleFederationProvider implements FederationProviderAdapter
                 emailVerified,
                 name,
                 picture,
-                tokenPayload
+                ProviderErrors.withoutCredentials(tokenPayload)
         );
     }
 

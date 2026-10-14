@@ -39,6 +39,7 @@
         <exeris.tooling.version>0.9.0</exeris.tooling.version>
 
         <junit.version>5.11.4</junit.version>
+        <testcontainers.version>1.21.4</testcontainers.version>
         <assertj.version>3.27.7</assertj.version>
     </properties>
 
@@ -70,13 +71,6 @@
 
         <dependency>
             <groupId>eu.exeris.caps</groupId>
-            <artifactId>exeris-caps-service-boundary-core</artifactId>
-            <version>0.1.0-SNAPSHOT</version>
-            <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>eu.exeris.caps</groupId>
             <artifactId>exeris-caps-audit-trail</artifactId>
             <version>0.1.0-SNAPSHOT</version>
             <optional>true</optional>
@@ -99,6 +93,18 @@
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>

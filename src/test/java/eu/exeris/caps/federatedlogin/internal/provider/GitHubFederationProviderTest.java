@@ -291,4 +291,39 @@ class GitHubFederationProviderTest {
                 .isInstanceOf(ProviderCommunicationException.class)
                 .hasMessageContaining("missing 'id'");
     }
+
+    @Test
+    @DisplayName("error messages carry the status and OAuth error code, never the response body")
+    void errorsDoNotEmbedProviderBody() {
+        GitHubFederationProvider provider = new GitHubFederationProvider();
+        ProviderExchangeRequest request = new ProviderExchangeRequest("code", "https://cb", "verifier", null,
+                "client", "secret", null, null);
+
+        PathRoutingHttpClient rejected = new PathRoutingHttpClient();
+        rejected.on("/login/oauth/access_token", new HttpResponse(HttpStatus.BAD_REQUEST, HttpVersion.HTTP_1_1, List.of(),
+                HeapLoanedBuffer.of("{\"error\": \"bad_verification_code\", \"access_token\": \"gho_SECRET\"}")));
+        assertThatThrownBy(() -> provider.processExchange(withClient(request, rejected)))
+                .isInstanceOf(ProviderCommunicationException.class)
+                .hasMessageContaining("bad_verification_code").hasMessageNotContaining("SECRET");
+
+        PathRoutingHttpClient noToken = new PathRoutingHttpClient();
+        noToken.on("/login/oauth/access_token", new HttpResponse(HttpStatus.OK, HttpVersion.HTTP_1_1, List.of(),
+                HeapLoanedBuffer.of("{\"refresh_token\": \"ghr_SECRET\"}")));
+        assertThatThrownBy(() -> provider.processExchange(withClient(request, noToken)))
+                .isInstanceOf(ProviderCommunicationException.class)
+                .hasMessageContaining("missing access_token").hasMessageNotContaining("SECRET");
+
+        PathRoutingHttpClient userFails = new PathRoutingHttpClient();
+        userFails.on("/login/oauth/access_token", new HttpResponse(HttpStatus.OK, HttpVersion.HTTP_1_1, List.of(),
+                HeapLoanedBuffer.of("{\"access_token\": \"gho_SECRET\"}")));
+        userFails.on("/user", new HttpResponse(HttpStatus.UNAUTHORIZED, HttpVersion.HTTP_1_1, List.of(),
+                HeapLoanedBuffer.of("{\"message\": \"Bad credentials gho_SECRET\"}")));
+        assertThatThrownBy(() -> provider.processExchange(withClient(request, userFails)))
+                .isInstanceOf(ProviderCommunicationException.class)
+                .hasMessageContaining("401").hasMessageNotContaining("SECRET");
+    }
+
+    private static ProviderExchangeRequest withClient(ProviderExchangeRequest r, HttpClientEngine client) {
+        return new ProviderExchangeRequest(r.code(), r.redirectUri(), r.codeVerifier(), r.nonce(), r.clientId(), r.clientSecret(), client, null);
+    }
 }

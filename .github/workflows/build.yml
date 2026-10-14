@@ -51,7 +51,7 @@ jobs:
           ref: v0.9.0
           path: exeris-tooling
 
-      # Sibling caps this one depends on at 0.1.0-SNAPSHOT. They are published nowhere, so they are
+      # Sibling caps this one depends on at 0.1.0-SNAPSHOT (service-boundary-core is audit-trail's own dependency). They are published nowhere, so they are
       # built from their default branch; a change there can turn this build red.
       - name: Checkout exeris-caps-service-boundary-core
         uses: actions/checkout@v7
@@ -79,6 +79,11 @@ jobs:
             echo "::error::PACKAGES_READ_TOKEN is not set, so exeris-kernel cannot be resolved from GitHub Packages"
             exit 1
           fi
+
+      # PostgresFederatedLoginLiveIT starts a PostgreSQL container (Testcontainers), and it is the only
+      # test that runs the SQL, so a runner without a Docker daemon must fail the build, not skip it.
+      - name: Check that a Docker daemon is available
+        run: docker info --format '{{.ServerVersion}}'
 
       # japicmp.skip: the SDK binds a semver gate to verify whose baseline is the previous release
       # jar, which a runner cannot resolve. That gate belongs to the SDK's own CI.
@@ -113,6 +118,20 @@ jobs:
       - name: mvn verify (second pass — generates, validates, scans the Wall)
         working-directory: exeris-caps-federated-login
         run: mvn -B -ntp -s .github/maven-settings.xml verify
+
+      - name: Assert the PostgreSQL integration test ran
+        working-directory: exeris-caps-federated-login
+        run: |
+          REPORT=target/surefire-reports/TEST-eu.exeris.caps.federatedlogin.internal.repository.PostgresFederatedLoginLiveIT.xml
+          if [ ! -f "$REPORT" ]; then
+            echo "::error::no surefire report for PostgresFederatedLoginLiveIT"
+            exit 1
+          fi
+          if ! grep -Eq 'tests="[1-9][0-9]*" errors="0" skipped="0" failures="0"' "$REPORT"; then
+            echo "::error::PostgresFederatedLoginLiveIT did not run to completion without skips"
+            grep -o '<testsuite [^>]*>' "$REPORT"
+            exit 1
+          fi
 
       - name: Assert the cap manifest was emitted and stamped
         working-directory: exeris-caps-federated-login

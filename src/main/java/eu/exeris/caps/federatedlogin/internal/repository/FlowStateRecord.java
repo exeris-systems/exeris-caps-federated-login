@@ -14,6 +14,7 @@ import java.util.Objects;
  * @param nonce              cryptographic OIDC nonce
  * @param createdAt          timestamp when flow was initiated
  * @param expiresAt          timestamp when flow expires (typically 5 minutes TTL)
+ * @param bindingHash        SHA-256 hash of the browser-binding value the initiating user agent holds
  * @since 0.1.0
  */
 public record FlowStateRecord(
@@ -24,7 +25,8 @@ public record FlowStateRecord(
         String codeVerifier,
         String nonce,
         Instant createdAt,
-        Instant expiresAt
+        Instant expiresAt,
+        String bindingHash
 ) {
     public FlowStateRecord {
         Objects.requireNonNull(stateHash, "stateHash must not be null");
@@ -32,6 +34,7 @@ public record FlowStateRecord(
         Objects.requireNonNull(redirectUri, "redirectUri must not be null");
         Objects.requireNonNull(createdAt, "createdAt must not be null");
         Objects.requireNonNull(expiresAt, "expiresAt must not be null");
+        Objects.requireNonNull(bindingHash, "bindingHash must not be null");
     }
 
     public boolean isExpired(Instant now) {
