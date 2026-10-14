@@ -133,6 +133,8 @@ public final class FlowStateKeyring {
     }
 
     /**
+     * Returns the id of the key that seals new flow states.
+     *
      * @return the id of the key that seals new flow states
      */
     public String activeId() {

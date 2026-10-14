@@ -42,6 +42,8 @@ public final class RedirectPolicy {
     }
 
     /**
+     * Returns the policy that rejects every redirect URI and every absolute post-login URL.
+     *
      * @return a policy that rejects every redirect URI and every absolute post-login URL
      */
     public static RedirectPolicy denyAll() {
@@ -107,6 +109,8 @@ public final class RedirectPolicy {
     }
 
     /**
+     * Requires {@code redirectUri} to exactly match a URI configured for {@code providerId}.
+     *
      * @throws InvalidRedirectException unless {@code redirectUri} exactly matches a URI configured for
      *                                  {@code providerId}
      */
@@ -119,6 +123,8 @@ public final class RedirectPolicy {
     }
 
     /**
+     * Accepts a {@code null}, relative-path or configured-origin destination and rejects anything else.
+     *
      * @param targetPostLoginUrl the destination after login; {@code null} means none
      * @throws InvalidRedirectException unless it is {@code null}, a safe relative path, or on a
      *                                  configured origin
