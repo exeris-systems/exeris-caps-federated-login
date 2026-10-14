@@ -23,6 +23,8 @@ public final class FederatedLoginConfigurationException extends FederatedLoginEx
     }
 
     /**
+     * Returns the configuration key the failure concerns, never its value.
+     *
      * @return the configuration key the failure concerns
      */
     public String key() {

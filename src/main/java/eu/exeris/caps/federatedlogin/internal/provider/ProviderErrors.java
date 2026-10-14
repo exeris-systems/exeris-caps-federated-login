@@ -25,6 +25,9 @@ final class ProviderErrors {
     }
 
     /**
+     * Extracts the OAuth {@code error} code from a provider response body without echoing any other
+     * content of the body.
+     *
      * @return the OAuth {@code error} code of a response body, or {@code "unspecified"} when the body is
      *         not a JSON object with a plain {@code error} member
      */
@@ -48,6 +51,9 @@ final class ProviderErrors {
     }
 
     /**
+     * Removes the credential-bearing fields from a provider payload before it becomes identity
+     * attributes.
+     *
      * @return a copy of {@code payload} without the fields that carry a credential
      */
     static Map<String, Object> withoutCredentials(Map<String, Object> payload) {
