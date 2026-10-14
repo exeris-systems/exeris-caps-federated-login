@@ -126,6 +126,7 @@ public final class PostgresExternalIdentityRepository implements ExternalIdentit
                         "email_verified = EXCLUDED.email_verified, " +
                         "metadata = EXCLUDED.metadata, " +
                         "updated_at = EXCLUDED.updated_at " +
+                        "WHERE external_identity_links.external_subject = EXCLUDED.external_subject " +
                         "RETURNING id, local_subject_id, issuer, external_subject, email, email_verified, metadata, linked_at, updated_at")) {
                     stmt.bindUuid(0, targetId)
                         .bindUuid(1, localSubjectId)
@@ -171,13 +172,10 @@ public final class PostgresExternalIdentityRepository implements ExternalIdentit
             throw re;
         }
 
-        // The upsert keeps the row's existing external_subject, so the stored row is what is returned;
-        // a concurrent link of another subject for the same issuer is a conflict, not a silent success.
+        // The update applies only to a row holding the same external_subject, so a link to a different
+        // identity returns no row and writes nothing: that is a conflict, not a silent success.
         ExternalLinkRecord result = stored.get();
         if (result == null) {
-            throw new IllegalStateException("Identity link upsert returned no row");
-        }
-        if (!result.externalSubject().equals(externalSubject)) {
             throw new IdentityLinkConflictException(
                     "Local subject " + localSubjectId + " already has a linked identity for issuer " + issuer);
         }

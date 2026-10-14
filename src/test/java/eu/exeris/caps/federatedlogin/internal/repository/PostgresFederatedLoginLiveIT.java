@@ -298,6 +298,29 @@ class PostgresFederatedLoginLiveIT {
     }
 
     @Test
+    @DisplayName("linking a different external subject for an existing (subject, issuer) conflicts and leaves the stored row untouched")
+    void conflictingLinkWritesNothingPostgres() {
+        UUID localSubject = UUID.randomUUID();
+        String issuer = "https://accounts.google.com";
+        Instant at = Instant.now().minusSeconds(3600).truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+
+        identityRepo.saveLink(UUID.randomUUID(), localSubject, issuer, "g-subject-a",
+                "a@gmail.com", true, Map.of("v", 1), at, at);
+        ExternalLinkRecord initial = identityRepo.findLink(localSubject, issuer).orElseThrow();
+
+        assertThatThrownBy(() -> identityRepo.saveLink(UUID.randomUUID(), localSubject, issuer, "g-subject-b",
+                "b@gmail.com", false, Map.of("v", 2), at, Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS)))
+                .isInstanceOf(IdentityLinkConflictException.class);
+
+        ExternalLinkRecord stored = identityRepo.findLink(localSubject, issuer).orElseThrow();
+        assertThat(stored.externalSubject()).isEqualTo("g-subject-a");
+        assertThat(stored.email()).isEqualTo(initial.email());
+        assertThat(stored.emailVerified()).isTrue();
+        assertThat(stored.metadata()).isEqualTo(initial.metadata());
+        assertThat(stored.updatedAt()).isEqualTo(initial.updatedAt());
+    }
+
+    @Test
     @DisplayName("re-linking same external identity in PostgreSQL updates fields while preserving id and linkedAt")
     void updateExistingLinkPostgres() {
         UUID initialId = UUID.randomUUID();
