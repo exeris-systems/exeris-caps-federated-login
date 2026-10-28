@@ -1,5 +1,6 @@
 package eu.exeris.caps.federatedlogin;
 
+import eu.exeris.kernel.spi.contract.EntitlementClass;
 import eu.exeris.kernel.spi.contract.EntitlementRequirement;
 import eu.exeris.kernel.tck.contract.AbstractEntitlementRequirementTck;
 import org.junit.jupiter.api.DisplayName;
@@ -34,5 +35,13 @@ class FederatedLoginEntitlementTest extends AbstractEntitlementRequirementTck {
     void requiresOnlyItsOwnCapability() {
         assertThat(new FederatedLoginEntitlement().requiredCapabilities()).containsExactly("exeris-caps-federated-login");
         assertThat(FederatedLoginEntitlement.CAPABILITY_ID).isEqualTo("exeris-caps-federated-login");
+    }
+
+    @Test
+    @DisplayName("entitlementClass() is COMMERCIAL and stable across calls")
+    void entitlementClassIsCommercialAndStable() {
+        FederatedLoginEntitlement entitlement = new FederatedLoginEntitlement();
+        assertThat(entitlement.entitlementClass()).isEqualTo(EntitlementClass.COMMERCIAL);
+        assertThat(entitlement.entitlementClass()).isSameAs(entitlement.entitlementClass());
     }
 }
