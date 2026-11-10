@@ -49,7 +49,7 @@ Neither `initiateLogin` nor `processCallback` limits how often a caller may star
 
 ### The schema is applied by hand
 
-`src/main/resources/schema/federated-login-schema.sql` creates tables only when they are absent, and nothing applies it. A table created by a build that predates a column keeps its old shape: `browser_binding_hash` is the current example. There is no migration path and no check at start-up that the tables match what the repositories expect. The item waits on a migration convention for capabilities that own tables.
+`src/main/resources/db/migration/exeris-caps-federated-login/V1__create_federated_login.sql` creates tables only when they are absent, and nothing applies it. A table created by a build that predates a column keeps its old shape: `browser_binding_hash` is the current example. There is no upgrade step for an existing table and no check at start-up that the tables match what the repositories expect. The item waits on a versioned migration beyond `V1` and on the SKU's migration runner.
 
 ### Only an in-memory credential store ships
 

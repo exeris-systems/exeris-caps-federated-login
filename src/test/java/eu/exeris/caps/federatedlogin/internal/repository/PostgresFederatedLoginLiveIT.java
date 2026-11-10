@@ -1,5 +1,6 @@
 package eu.exeris.caps.federatedlogin.internal.repository;
 
+import eu.exeris.caps.federatedlogin.FederatedLoginModule;
 import eu.exeris.caps.federatedlogin.api.exception.FlowStateUnreadableException;
 import eu.exeris.caps.federatedlogin.api.exception.IdentityLinkConflictException;
 import eu.exeris.caps.federatedlogin.api.model.ExternalLinkRecord;
@@ -68,13 +69,16 @@ class PostgresFederatedLoginLiveIT {
     @BeforeAll
     static void setUpDatabase() throws Exception {
         jdbcConn = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        try (Statement stmt = jdbcConn.createStatement();
-             InputStream is = PostgresFederatedLoginLiveIT.class.getResourceAsStream("/schema/federated-login-schema.sql")) {
-            assertThat(is).as("schema resource").isNotNull();
-            String ddl = new String(is.readAllBytes(), StandardCharsets.UTF_8).replaceAll("(?m)^--.*$", "");
-            for (String command : ddl.split(";")) {
-                if (!command.isBlank()) {
-                    stmt.execute(command.trim());
+        try (Statement stmt = jdbcConn.createStatement()) {
+            for (String migration : FederatedLoginModule.MIGRATIONS) {
+                try (InputStream is = FederatedLoginModule.class.getClassLoader().getResourceAsStream(migration)) {
+                    assertThat(is).as(migration).isNotNull();
+                    String ddl = new String(is.readAllBytes(), StandardCharsets.UTF_8).replaceAll("(?m)^--.*$", "");
+                    for (String command : ddl.split(";")) {
+                        if (!command.isBlank()) {
+                            stmt.execute(command.trim());
+                        }
+                    }
                 }
             }
         }

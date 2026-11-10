@@ -61,6 +61,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Requires(service = AuditLogSink.class, versionRange = "[0.1.0,0.2.0)", optional = true)
 public final class FederatedLoginModule implements CapabilityLifecycleHooks {
 
+    /**
+     * The schema migrations of this capability, in the order they apply, as classpath resource paths. The
+     * capability does not apply them itself; the composing SKU does, before the first service call that
+     * uses a {@link TransactionalExecutor}.
+     */
+    public static final List<String> MIGRATIONS = List.of(
+            "db/migration/exeris-caps-federated-login/V1__create_federated_login.sql");
+
     private final FederatedLoginFlow federatedLoginFlow;
     private final ExternalIdentityLink externalIdentityLink;
     private final FederationProviderRegistry providerRegistry;
