@@ -117,7 +117,7 @@ S11. **Provider credentials come from `spi.OutboundCredentialStore`.** A client 
     tests.
 
 S12. **Storage honours the README.** In-memory unless a `TransactionalExecutor` is supplied, then
-    PostgreSQL, with the DDL in `src/main/resources/schema/federated-login-schema.sql` applied by
+    PostgreSQL, with the DDL in `src/main/resources/db/migration/exeris-caps-federated-login/V1__create_federated_login.sql` applied by
     the SKU. A change to a stored column that leaves that file unchanged → `[CONTRACT]`.
 
 ## Where this does not apply, and what it costs

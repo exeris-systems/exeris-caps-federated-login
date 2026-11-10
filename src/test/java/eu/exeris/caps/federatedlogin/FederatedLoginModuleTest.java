@@ -22,6 +22,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class FederatedLoginModuleTest {
 
     @Test
+    @DisplayName("the migrations it names are on the classpath")
+    void migrationsArePackaged() {
+        assertThat(FederatedLoginModule.MIGRATIONS).isNotEmpty().allSatisfy(path ->
+                assertThat(FederatedLoginModule.class.getClassLoader().getResource(path)).as(path).isNotNull());
+    }
+
+    @Test
     @DisplayName("module lifecycle transitions through initialize, ready, drain, terminate")
     void lifecycleTransitions() throws Exception {
         FederatedLoginModule module = new FederatedLoginModule();
