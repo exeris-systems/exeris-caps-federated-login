@@ -1,5 +1,6 @@
 package eu.exeris.caps.federatedlogin;
 
+import eu.exeris.kernel.spi.contract.EntitlementClass;
 import eu.exeris.kernel.spi.contract.EntitlementRequirement;
 
 import java.util.Set;
@@ -32,5 +33,15 @@ public final class FederatedLoginEntitlement implements EntitlementRequirement {
     @Override
     public Set<String> requiredCapabilities() {
         return REQUIRED;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Always returns {@link EntitlementClass#COMMERCIAL} on every invocation.
+     */
+    @Override
+    public EntitlementClass entitlementClass() {
+        return EntitlementClass.COMMERCIAL;
     }
 }
